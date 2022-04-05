@@ -4,7 +4,7 @@ Repository for the paper [A Typology to Explore and Guide Explanatory Interactiv
 
 * Right for Right Reason (RRR) (Ross et. al., 2017)
 * Right for the Better Reason (RBR) (Shao et. al., 2021)
-* Right for the Right Reason GradCAM (RRR-G) (Schramowskiet al., 2020)
+* Right for the Right Reason GradCAM (RRR-G) (Schramowski al., 2020)
 * Human Importance-aware Network Tuning (HINT) (Selvaraju et. al., 2019)
 * Contextual Decomposition Explanation Penalization (CDEP) (Rieger et. al., 2019)
 * Counterexamples (CE) (Teso & Kersting, 2019).
@@ -43,7 +43,3 @@ If you like or use our work please cite us:
 }
 ```
 <!-- #endregion -->
-
-```python
-
-```
