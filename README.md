@@ -2,11 +2,11 @@
 # Programming Framework of XIL Typology
 Repository for the paper [A Typology to Explore and Guide Explanatory Interactive Machine Learning](https://arxiv.org/abs/2203.03668). All developed components use the PyTorch library and are evaluated on CV tasks. This repository implements and examines the following XIL methods:
 
-* Right for Right Reason (RRR) (Ross et. al., 2017)
-* Right for the Better Reason (RBR) (Shao et. al., 2021)
-* Right for the Right Reason GradCAM (RRR-G) (Schramowski al., 2020)
-* Human Importance-aware Network Tuning (HINT) (Selvaraju et. al., 2019)
-* Contextual Decomposition Explanation Penalization (CDEP) (Rieger et. al., 2019)
+* Right for Right Reason (RRR) (Ross et al., 2017)
+* Right for the Better Reason (RBR) (Shao et al., 2021)
+* Right for the Right Reason GradCAM (RRR-G) (Schramowski et al., 2020)
+* Human Importance-aware Network Tuning (HINT) (Selvaraju et al., 2019)
+* Contextual Decomposition Explanation Penalization (CDEP) (Rieger et al., 2019)
 * Counterexamples (CE) (Teso & Kersting, 2019).
 
 
