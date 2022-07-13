@@ -99,7 +99,7 @@ elif args.dataset == 'FMnist':
         args.reg = 2000000  
         loss_fn = CDEPLoss(args.reg)
 
-
+os.makedirs('output_wr_metric', exist_ok = True)
 # +
 avg1, avg2, avg3 = [], [], []
 i = args.run
