@@ -111,4 +111,4 @@ MODELNAME = f'Decoy{args.dataset}-CNN-{args.mode}--reg={args.reg}--seed={SEED[i]
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 learner = Learner(model, loss_fn, optimizer, DEVICE, MODELNAME)
 learner.fit(train_dataloader, test_dataloader, EPOCHS, save_best=SAVE_BEST, verbose_after_n_epochs=VERBOSE_AFTER_N_EPOCHS)
-avg0.append(learner.score(test_dataloader, nn.CrossEntropyLoss())[0])
+print(learner.score(test_dataloader, nn.CrossEntropyLoss())[0])
