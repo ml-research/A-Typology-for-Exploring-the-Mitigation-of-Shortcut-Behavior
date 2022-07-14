@@ -36,18 +36,17 @@ python wrong_reason_MNIST.py --mode RRR --dataset MNIST --method GradCAM IG LIME
 
 This yields percentage values of how strong the model relies on a confounder. Lower values are better. The run time is a couple of seconds for GradCAM and IG while it is up to an hour for LIME.
 
-Further experiments of the paper can be conducted with the following scripts: `switch_xil_on.py`, `interaction_efficiency.py`, and `robustness.ipnyb`. These scripts evaluate a XIL-revised model with different tasks and benchmarks beyond accuracy. The first two follow the same instructions as above and contain descriptions within the scripts about which argument to use and when. `robustness.ipnyb` is an interactive notebook, for 
+Further experiments of the paper can be conducted with the following scripts: `switch_xil_on.py`, `interaction_efficiency.py`, and `robustness.ipnyb`. These scripts evaluate a XIL-revised model with different tasks and benchmarks beyond accuracy. The first two follow the same instructions as above and contain descriptions within the scripts about which argument to use and when. `robustness.ipnyb` is an interactive notebook, for evaluating how robust a XIL method is to feedback quality variations. It can be used via
 
 ```
 jupyter notebook robustness.ipnyb
 ``` 
 
-
-### Data
+#### Data
 The data is automatically downloaded and stored in the folder structure of this repository (see `data_store/datasets.py`). So for any experiment you don't need to prepare data.
 
 ## Framework structure
-The following describes and explains the core components/modules:
+The following describes and explains the core components/ modules:
 
 * `data_store`: Place for all dataset-related stuff. `datasets.py` currently implements three datasets (DecoyMNIST, DecoyFMNIST and ISIC Skin Cancer 2019). `rawdata` contains utility functions for setting up and downloading raw data. 
 * `learner`: Folder that contains classes and functions related to an ML learner. `models/dnns.py` implements different neural networks (SimpleConvNET, VGG16). `learner.py` implements a ML learner with different properties and provides the training routines (`fit()`, `fit_isic()`, `fit_n_expl_shuffled_dataloader()`) as well as some utility functions for scoring/storing/loading a learner. Trained models are stored in the `model_store`.
@@ -58,7 +57,6 @@ The following describes and explains the core components/modules:
 * `visualize_explanations.ipynb`: Generates heatmaps for visualization in order to get qualitative results.
 
 Main functions to run experiments:
-
 * `main_MNIST.py`: Implements the main setup for the DecoyMNIST/FMNIST experiments.  
 * `main_isic.py`: Implements the main setup for the ISIC19 experiments.
 * `wrong_reason_MNIST.py`: Quantify WR for the DecoyMNIST/FMNIST experiments.
@@ -70,8 +68,9 @@ Main functions to run experiments:
 ## Contact
 **Author:** Felix Friedrich  
 **Institution:** Technische Universität Darmstadt (2022)  
-**Department:** Machine Learning Lab, Computer Science, TU Darmstadt, Germany   
+**Department:** Artificial Intelligence and Machine Learning Lab, Computer Science, TU Darmstadt, Germany   
 **Mail:** <friedrich@cs.tu-darmstadt.de>
+**Further Work:** https://ml-research.github.io/
 
 ## Citation
 If you like or use our work please cite us:
