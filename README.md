@@ -9,11 +9,11 @@ Repository for the paper [A Typology to Explore and Guide Explanatory Interactiv
 * Contextual Decomposition Explanation Penalization (CDEP) (Rieger et al., 2019)
 * Counterexamples (CE) (Teso & Kersting, 2019).
 
-![XIL Typology](./framework_fig.png)
+![XIL Typology](./misc/framework_fig.png)
 
 ## Overview
 As machine learning models become increasingly larger, trained weakly supervised on large, possibly uncurated data sets, it becomes increasingly important to establish mechanisms for introspecting, interacting, and revising models to guarantee their learned knowledge is aligned with human knowledge. 
-The here presented XIL framework was developed for this purpose. 
+The here presented XIL framework (Algorithm 1) was developed for this purpose. 
 Besides implementing the general XIL framework, we also provide and implement a toolbox for existing and novel metrics and benchmarks for evaluating the overall abilities of a XIL method.
 
 ## Requirements
@@ -26,7 +26,7 @@ To train a model with a certain XIL method and dataset, e.g. use
 python main_MNIST.py --mode RRR --dataset MNIST
 ``` 
 
-The expected output is a learning procedure where the train and test accuracy and loss are shown over time. Without XIL (i.e. `--mode Vanilla`) the model relies on the decoy/ confounder, there is a big difference between train and test accuracy. With a XIL method this difference is small, i.e. the model is successfully revised via XIL. The run-time on a NVIDIA V100 GPU is less than 2min and on a normal desktop PC with GTX1080 it is less than 15min. The data for this experiment is automatically downloaded and stored by our scripts (see `data_store/datasets.py`). The passed arguments are explained in each file.
+The expected output is a learning procedure where the train and test accuracy/ loss are shown over time. Without XIL (i.e. `--mode Vanilla`) the model relies on the decoy/ confounder, there is a big difference between train and test accuracy. With a XIL method this difference is small, i.e. the model is successfully revised via XIL. If not, the XIL method does not work. Depending on the used XIL method, the run-time on a NVIDIA V100 GPU is less than 2min and on a normal desktop PC with GTX1080 it is less than 15min. The passed arguments are explained in each file.
 
 Next, we can evaluate the previously trained model with the WR metric (see paper). The *method* argument specifies for which explanation method to evaluate. Here, multiple arguments are also possible.
 
@@ -39,6 +39,9 @@ This yields percentage values of how strong the model relies on a confounder. Lo
 Further experiments of the paper can be conducted with the following scripts: `switch_xil_on.py`, `interaction_efficiency.py`, and `robustness.ipnyb`. These scripts evaluate a XIL-revised model with different tasks and benchmarks beyond accuracy. They follow the same instructions as above and contain descriptions within the scripts about which argument to use and when.
 
 With `visualize_explanations.ipynb` heatmaps can be generated and visualized in order to get qualitative results.
+
+### Data
+The data is automatically downloaded and stored with in the folder structure of this repository (see `data_store/datasets.py`). So for any experiment you don't need to prepare data.
 
 ## Framework structure
 The following describes and explains the core components/modules:
