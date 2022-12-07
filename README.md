@@ -1,7 +1,7 @@
 <!-- #region -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 # Programming Framework of XIL Typology
-Repository for the paper [A Typology to Explore and Guide Explanatory Interactive Machine Learning](https://arxiv.org/abs/2203.03668). This repository focuses on evaluating XIL on Computer Vision tasks but can be adapted to e.g. NLP tasks with little effort. Furthermore, this repository implements and examines the following XIL methods:
+Repository for the paper [A Typology to Explore the Mitigation of Shortcut Behavior](https://arxiv.org/abs/2203.03668). This repository focuses on evaluating XIL on Computer Vision tasks but can be adapted to e.g. NLP tasks with little effort. Furthermore, this repository implements and examines the following XIL methods:
 
 * Right for Right Reason (RRR) (Ross et al., 2017)
 * Right for the Better Reason (RBR) (Shao et al., 2021)
