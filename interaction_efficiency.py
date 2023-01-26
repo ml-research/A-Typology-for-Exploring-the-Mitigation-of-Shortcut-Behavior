@@ -13,6 +13,7 @@ from xil_methods.xil_loss import RRRLoss, RRRGradCamLoss, CDEPLoss, HINTLoss, RB
 import util
 import explainer
 import argparse
+from rtpt import RTPT
 
 # Hyperparameters
 EPOCHS = 50
@@ -38,6 +39,9 @@ parser.add_argument('--reg', default=1000, type=int,
 args = parser.parse_args()
 methods = [args.mode]
 
+rtpt = RTPT(name_initials='FF', experiment_name='XIL_EVAL', max_iterations=len(SEED)*len(N_EXPLS))
+rtpt.start()
+# -
 
 if args.data == 'MNIST':
     for n_expl in N_EXPLS:
@@ -72,6 +76,7 @@ if args.data == 'MNIST':
                     reg = args.reg * reg
                     loss_fn = CDEPLoss(reg)
                 print(f'{meth}-{n}')
+                rtpt.step()
                 model = dnns.SimpleConvNet().to(DEVICE)
                 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
                 #modelname = f'IntEff-DecoyMNIST-CNN-{meth}--{n_expl}--seed={SEED[n]}'

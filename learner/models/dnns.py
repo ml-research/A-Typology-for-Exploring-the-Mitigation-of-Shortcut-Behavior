@@ -75,7 +75,6 @@ class NetRieger(nn.Module):
         x = F.max_pool2d(x, 2, 2)
         x = x.view(-1, 4*4*50)
         x = F.relu(self.fc1(x))
-        
         x = self.fc2(x)
         return x
 

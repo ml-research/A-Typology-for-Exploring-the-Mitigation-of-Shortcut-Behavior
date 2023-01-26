@@ -4,8 +4,8 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 from torchvision import transforms
-from captum.attr import LayerGradCam, LayerAttribution, Saliency, \
-    InputXGradient, IntegratedGradients
+from captum.attr import LayerGradCam, LayerAttribution, Saliency, DeepLift,\
+    InputXGradient, IntegratedGradients, GuidedBackprop, LRP
 from lime import lime_image
 from skimage.color import gray2rgb
 from tqdm import tqdm
@@ -27,7 +27,7 @@ def explain_with_captum(method, model, dataloader, index_list, sign='positive', 
         dataloader: pytorch dataloader (images, labels, _ ).
         index_list: list of indices for the images you want to explain. Takes the specified
             indices from the first batch of the dataloader (batchsize needs to be bigger 
-            than the lenght of the specified indices.
+            than the length of the specified indices.
         sign: specifies which attributions should be visualized. Either 'positive', 'negative',
             'absolute_value', 'all'. (see captum library viz.visualize_image_attr()).
         next_to_each_other: if True then plots one figure with the original image left and the 
@@ -75,6 +75,18 @@ def explain_with_captum(method, model, dataloader, index_list, sign='positive', 
             attr = grad_cam.attribute(img, target=predicted.item(), relu_attributions=True)
             h, w = img.shape[2], img.shape[3]
             attr = LayerAttribution.interpolate(attr, (h, w))
+
+        elif method == 'deep_lift':
+            dl = DeepLift(model)
+            attr = dl.attribute(img, target=predicted.item())
+
+        elif method == 'lrp':
+            lrp = LRP(model)
+            attr = lrp.attribute(img, target=predicted.item())
+
+        elif method == 'guided_backprop':
+            gbp = GuidedBackprop(model)
+            attr = gbp.attribute(img, target=predicted.item())
        
         elif method == 'integrated_gradients':
             intgrad = IntegratedGradients(model)
@@ -139,11 +151,11 @@ def explain_with_ig(model, dataloader, index_list, sign='positive', \
         dataloader: torch dataloader with stored batches (X, y, expl), expl is optional
         index_list: list of indices for the images you want to explain. Takes the specified
             indices from the first batch of the dataloader (batchsize needs to be bigger 
-            than the lenght of the specified indices. 
+            than the length of the specified indices.
         sign: specifies which attributions should be visualized. Either 'positive', 'negative',
             'absolute_value', 'all'. (see captum library viz.visualize_image_attr()).
         next_to_each_other: if True then plots one figure with the original image left and the 
-            heatmap on the right side. If False then plot two seperate plots for org. images
+            heatmap on the right side. If False then plot two separate plots for org. images
             and corresponding heatmaps.
         save_name: if specified the resulting plot will be saved to output_images folder and not
             be printed.  
@@ -652,7 +664,7 @@ def explain_with_ig_one_by_one(model, dataloader, sign='positive', \
 
 # ### WRONG REASON QUANTIFICATION: WR METRIC
 
-def quantify_wrong_reason(method, dataloader, model, device, name, \
+def quantify_wrong_reason(method, dataloader, model, device, name, wr_name,\
     foldername="output_wr_metric/", threshold=None, mode='mean', flags=True):
     """
     Quantifies wrong reason based on ground-truth explanations (i.e.
@@ -682,9 +694,10 @@ def quantify_wrong_reason(method, dataloader, model, device, name, \
     actScores = []
     number_instances = 0
     cannot_attribute_num = 0
+    img_num = []
 
     with tqdm(dataloader, unit="batch") as tbatch:
-        for data in tbatch:
+        for num, data in enumerate(tbatch):
             if flags:
                 images_t, masks_t, flags_t = data[0].to(device), data[2].to(device), data[3].to(device)
             else:
@@ -693,9 +706,10 @@ def quantify_wrong_reason(method, dataloader, model, device, name, \
             images_t.requires_grad_()
             logits = model(images_t)
             h, w = images_t.shape[2], images_t.shape[3]
+            _, predicted = torch.max(F.softmax(logits, dim=1), 1)
 
             if method == 'grad_cam':
-                _, predicted = torch.max(F.softmax(logits, dim=1), 1)
+                # _, predicted = torch.max(F.softmax(logits, dim=1), 1)
                 # network importance score --> compute GradCam attribution of last conv layer
                 last_conv_layer = util.get_last_conv_layer(model)
                 explainer = LayerGradCam(model, last_conv_layer)
@@ -703,6 +717,30 @@ def quantify_wrong_reason(method, dataloader, model, device, name, \
                 # upsample attr
                 attr = LayerAttribution.interpolate(attr, (h, w))
                 # attr.shape => (n,1,h,w)
+
+            elif method == 'saliency':
+                sal = Saliency(model)
+                attr = sal.attribute(images_t, target=predicted)
+
+            elif method == 'input_x_gradient':
+                ixg = InputXGradient(model)
+                attr = ixg.attribute(images_t, target=predicted)
+
+            elif method == 'deep_lift':
+                dl = DeepLift(model)
+                attr = dl.attribute(images_t, target=predicted)
+
+            elif method == 'guided_backprop':
+                gbp = GuidedBackprop(model)
+                attr = gbp.attribute(images_t, target=predicted)
+
+            elif method == 'lrp':
+                lrp = LRP(model)
+                attr = lrp.attribute(images_t, target=predicted)
+
+            elif method == 'integrated_gradient':
+                intgrad = IntegratedGradients(model)
+                attr = intgrad.attribute(images_t, target=predicted)
 
             elif method == 'ig_ross':
                 model.zero_grad()
@@ -749,6 +787,9 @@ def quantify_wrong_reason(method, dataloader, model, device, name, \
 
                 actScore = torch.div(attr_ca, attr_max)
                 actScores += actScore.tolist()
+                if dataloader.batch_size == 1:
+                    img_num.append(num)
+                # print("actScore " + str(actScore))
 
             else: # calc median/mean
                 if mode == 'mean':
@@ -756,6 +797,12 @@ def quantify_wrong_reason(method, dataloader, model, device, name, \
                 elif mode == 'median':
                     scores = torch.median(norm_attr.view(norm_attr.size(0), -1), dim=1)[0]
                 actScores += scores.tolist()
+                if dataloader.batch_size == 1:
+                    img_num.append(num)
+            #     print("scores " + str(scores))
+
+            # print(" !!!!!! SCORES = " + str(a))
+            # check if list item in actScores equal to 'BATCH_SIZE'
 
 
     if number_instances != len(actScores):
@@ -781,6 +828,27 @@ def quantify_wrong_reason(method, dataloader, model, device, name, \
             }
         with open(foldername + name + '-wrong_reason_stats.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
+
+        def takeSecond(elem):
+            return elem[1]
+
+        if img_num:
+            arr = np.array(actScores)
+            arr = 100 * arr
+            actScores = arr.tolist()
+            wr_score = list(zip(img_num, actScores))
+            wr_score.sort(key=takeSecond, reverse=True)
+            # breakpoint()
+            wr_score = list(zip(img_num, wr_score))
+            f = open(f"./img_wr_metric/{wr_name}.txt", "w")
+            f.write(f'\t img_num \t wr_score \n')
+            for i in wr_score:
+                line = str(i[0]) + "\t" + str(i[1][0]) + "\t\t\t" + str(i[1][1])
+                f.write(f'{line}\n')
+            f.close()
+
+        # breakpoint()
+
         return 100*avg_activation_per_instance
 
     else:
@@ -802,6 +870,13 @@ def quantify_wrong_reason(method, dataloader, model, device, name, \
         
         with open(foldername + name + '-' + str(mode) + '.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
+
+        # if img_num:
+        #     arr = np.array(actScores)
+        #     arr = 100 * arr
+        #     actScores = arr.tolist()
+        #     wr_score = list(zip(img_num, actScores))
+
         return float(value)#, len(actScores)
 
 def quantify_wrong_reason_lime(dataloader, model, name, foldername="output_wr_metric/",\
@@ -1098,9 +1173,7 @@ def quantify_wrong_reason_lime_preload(model, name, foldername="output_wr_metric
             with open(foldername + name + '-' + str(mode) + '.json', 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
         
-        return avg_activation_per_instance
-
-
+        return 100*avg_activation_per_instance
 
 def store_mean_quantification_score_per_image_confounder(dataloader, model, \
         device, foldername="output_wr_metric/", save_name='train'):
