@@ -11,43 +11,6 @@ from xil_methods.cd_util import cd
 import util
 import explainer
 
-# not used
-# def is_rawr(attribution, A, logits, y, threshold):
-#     """
-#     Return indices of instances in the batch which are Right Answer Wrong Reason (RAWR).
-
-#     Args:
-#         attribution: the unnormalized attribution of the explainer method (can be gradients, 
-#             saliency maps). Tensor of shape (n, channels, h, w).
-#         A: the ground-truth explanation feedback mask where ones indicate the confounding factor.
-#         logits: the logits of the model.
-#         y: the corresponding ground-truth labels to the logits.
-#         threshold: the threshold defines the strictness (t=small —> strict, 
-#             t=large —> not strict) with which the WR case is measured.
-#     """
-#     # check if right answer
-#     preds = torch.max(F.softmax(logits, dim=1), 1)[1]
-#     ra_mask = torch.eq(y, preds) # Trues for inputs that have right answer
-
-#      # we need to clone the attribution because its called by reference and 
-#      # we modify it in norm saliencies. We therefore detach it from the graph and clone it
-#     attribution = attribution.detach().clone() 
-
-#     # check if wrong reason
-#     # we define wrong reason for one input as:
-#     # -> sum of normalized attribution in the confounding region > threshold t 
-#     # (in our case t=2, confounding region as indicated by the expl user mask; max value of sum
-#     # =16 --> full focus on confoundfing factor, min=0 --> zero focus on confounding factor)
-
-#     norm_attr = util.norm_saliencies_fast(attribution, positive_only=True)
-#     attr_x_expl = torch.mul(A, norm_attr)
-#     flat_attr_x_expl = attr_x_expl.view(attr_x_expl.size(0), -1)
-#     thresholds = torch.sum(flat_attr_x_expl, dim=1)
-#     wr_mask = torch.ge(thresholds, threshold)
-#     ra_and_wr = torch.logical_and(ra_mask, wr_mask)
-#     indices = torch.nonzero(ra_and_wr, as_tuple=True)[0]
-#     how_many_rawr = len(indices) # save the number of instances that are RAWR
-#     return indices, how_many_rawr
 
 class RRRLoss(nn.Module):
     """
@@ -85,9 +48,6 @@ class RRRLoss(nn.Module):
             expl: explanation annotations masks (ones penalize regions).
             logits: model output logits. 
         """
-        # calculate right answer loss (Cross Entropy loss)
-        right_answer_loss = self.base_criterion(logits, y)
-
         # get gradients w.r.t. to the input
         log_prob_ys = F.log_softmax(logits, dim=1)
         log_prob_ys.retain_grad()
@@ -107,15 +67,13 @@ class RRRLoss(nn.Module):
         right_reason_loss *= self.regularizer_rate
 
         if self.weight is not None:
-            right_reason_loss *= self.weight[y[0]]
+            right_reason_loss *= self.weight#[y[0]]
 
         if self.rr_clipping is not None:
             if right_reason_loss > self.rr_clipping:
                 right_reason_loss = right_reason_loss - right_reason_loss + self.rr_clipping
 
-        res = right_answer_loss + right_reason_loss
-
-        return res, right_answer_loss, right_reason_loss
+        return right_reason_loss
 
 class RBRLoss(nn.Module):
     """
@@ -199,9 +157,7 @@ class RBRLoss(nn.Module):
             if right_reason_loss > self.rr_clipping:
                 right_reason_loss = right_reason_loss - right_reason_loss + self.rr_clipping
 
-        res = right_answer_loss + right_reason_loss
-        
-        return res, right_answer_loss, right_reason_loss
+        return right_reason_loss
 
 class RRRGradCamLoss(nn.Module):
     """
@@ -237,16 +193,16 @@ class RRRGradCamLoss(nn.Module):
 
     def forward(self, model, X, y, expl, logits, device, mask=None):
         """
-        Returns (loss, right_answer_loss, right_reason_loss)
+        Returns right_answer_loss
 
         Args:
             X: inputs.
             y: ground-truth labels.
             expl: explanation annotations matrix (ones penalize regions).
             logits: model output logits. 
+            device:
+            mask:
         """
-        # calculate right answer loss (Cross Entropy loss)
-        right_answer_loss = self.base_criterion(logits, y)
         # get gradients w.r.t. to the input
         log_ys = torch.argmax(F.softmax(logits, dim=1), dim=1)
 
@@ -294,9 +250,7 @@ class RRRGradCamLoss(nn.Module):
             if right_reason_loss > self.rr_clipping:
                 right_reason_loss = right_reason_loss - right_reason_loss + self.rr_clipping
 
-        res = right_answer_loss + right_reason_loss
-
-        return res, right_answer_loss, right_reason_loss
+        return right_reason_loss
 
 class CDEPLoss(nn.Module):
     """
@@ -324,20 +278,16 @@ class CDEPLoss(nn.Module):
         self.model_type = model_type
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, expl, logits, device, mask=None):
+    def forward(self, model, X, y, expl, device):
         """
-        Returns (loss, right_answer_loss, right_reason_loss)
+        Returns right_answer_loss
 
         Args:
             model: pytorch model.
             X: inputs (train set).
             y: Ground-truth labels.
             expl: Explanation annotations matrix (ones penalize regions).
-            logits: model output logits. 
         """
-        # calculate right answer loss 
-        # right_answer_loss = F.cross_entropy(logits, y)
-        right_answer_loss = self.base_criterion(logits, y)
         #rel, irrel = cd.cd(expl, X, model, model_type=model_type, device=device)
         right_reason_loss = torch.zeros(1,).to(device)
         
@@ -355,8 +305,7 @@ class CDEPLoss(nn.Module):
             if right_reason_loss > self.rr_clipping:
                 right_reason_loss = right_reason_loss  - right_reason_loss + self.rr_clipping
 
-        res = right_reason_loss + right_answer_loss
-        return res, right_answer_loss, right_reason_loss
+        return torch.squeeze(right_reason_loss)
 
 class HINTLoss(nn.Module):
     """
@@ -397,7 +346,7 @@ class HINTLoss(nn.Module):
         self.rr_clipping = rr_clipping
 
 
-    def forward(self, model, X, y, expl, logits, device, mask=None):
+    def forward(self, model, X, y, expl, device, mask=None):
         """
         Returns (loss, right_answer_loss, right_reason_loss)
 
@@ -411,7 +360,6 @@ class HINTLoss(nn.Module):
         """
         # human importance map = expl: -> array {0,1} region with high importance have ones
         # calculate right answer loss 
-        right_answer_loss = self.base_criterion(logits, y)
         model.eval()
 
         # network importance score --> compute GradCam attribution of last conv layer
@@ -468,9 +416,8 @@ class HINTLoss(nn.Module):
             if right_reason_loss > self.rr_clipping:
                 right_reason_loss = right_reason_loss  - right_reason_loss + self.rr_clipping
 
-        res = right_reason_loss + right_answer_loss
         model.train() # probably useless
-        return res, right_answer_loss, right_reason_loss
+        return torch.squeeze(right_reason_loss)
 
 class HINTLoss_IG(nn.Module):
     """
@@ -1386,3 +1333,43 @@ class MixLossGeneralRevised(nn.Module):
         res = right_answer_loss + right_reason_loss
 
         return res, right_answer_loss, right_reason_loss
+
+
+
+# not used
+# def is_rawr(attribution, A, logits, y, threshold):
+#     """
+#     Return indices of instances in the batch which are Right Answer Wrong Reason (RAWR).
+
+#     Args:
+#         attribution: the unnormalized attribution of the explainer method (can be gradients, 
+#             saliency maps). Tensor of shape (n, channels, h, w).
+#         A: the ground-truth explanation feedback mask where ones indicate the confounding factor.
+#         logits: the logits of the model.
+#         y: the corresponding ground-truth labels to the logits.
+#         threshold: the threshold defines the strictness (t=small —> strict, 
+#             t=large —> not strict) with which the WR case is measured.
+#     """
+#     # check if right answer
+#     preds = torch.max(F.softmax(logits, dim=1), 1)[1]
+#     ra_mask = torch.eq(y, preds) # Trues for inputs that have right answer
+
+#      # we need to clone the attribution because its called by reference and 
+#      # we modify it in norm saliencies. We therefore detach it from the graph and clone it
+#     attribution = attribution.detach().clone() 
+
+#     # check if wrong reason
+#     # we define wrong reason for one input as:
+#     # -> sum of normalized attribution in the confounding region > threshold t 
+#     # (in our case t=2, confounding region as indicated by the expl user mask; max value of sum
+#     # =16 --> full focus on confoundfing factor, min=0 --> zero focus on confounding factor)
+
+#     norm_attr = util.norm_saliencies_fast(attribution, positive_only=True)
+#     attr_x_expl = torch.mul(A, norm_attr)
+#     flat_attr_x_expl = attr_x_expl.view(attr_x_expl.size(0), -1)
+#     thresholds = torch.sum(flat_attr_x_expl, dim=1)
+#     wr_mask = torch.ge(thresholds, threshold)
+#     ra_and_wr = torch.logical_and(ra_mask, wr_mask)
+#     indices = torch.nonzero(ra_and_wr, as_tuple=True)[0]
+#     how_many_rawr = len(indices) # save the number of instances that are RAWR
+#     return indices, how_many_rawr

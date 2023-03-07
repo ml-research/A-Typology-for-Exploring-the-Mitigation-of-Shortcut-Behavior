@@ -1,54 +1,128 @@
-"""Learner class with different utility functions."""
 import logging
 import time
 import uuid
-import os.path
-
+from torch.utils.tensorboard.writer import SummaryWriter
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.optim.lr_scheduler import ReduceLROnPlateau 
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.metrics import confusion_matrix, classification_report
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from rtpt import RTPT
+from xil_methods.xil_loss import RRRGradCamLoss, RRRLoss, CDEPLoss, HINTLoss, HINTLoss_IG, RBRLoss
 
-from xil_methods.xil_loss import RRRGradCamLoss, RRRLoss, CDEPLoss, HINTLoss, RBRLoss, HINTLoss_IG, MixLoss1, MixLoss2, MixLoss3, \
-    MixLoss4, MixLoss5, MixLoss6, MixLoss7, MixLoss8, MixLoss8_ext, MixLoss9, MixLoss11, MixLoss12, MixLoss13, MixLoss14, \
-    MixLoss15, MixLoss16, MixLoss17, MixLoss18, MixLossGeneral, MixLossGeneralRevised
 
 class Learner:
-    """Implements a ML learner (based on PyTorch model)."""
 
-    def __init__(self, model, loss, optimizer, device, modelname, load=False, \
-        base_criterion=F.cross_entropy):
-        """
-        Args:
-            model: pytorch model.
-            loss: pytorch loss function.
-            optimizer: pytorch optimizer.
-            device: either 'cuda' or 'cpu'.
-            modelname: a unique name that identifies the model. Is used to store log/run files
-                as well as the model itself.
-            load: if True loads the model with modelname from model_store.
-            base_criterion: pytorch functional loss function. Is used in experiments which 
-                disable the XIL loss. Default cross_entropy.
-        """
-        self.model = model
-        self.loss = loss
-        self.base_criterion = base_criterion
-        self.optimizer = optimizer
+    def __init__(self, model, optimizer, device, modelname,
+                 loss_rrr_weight=None, loss_rrr_gc_weight=None, loss_cdep_weight=None, loss_hint_weight=None, loss_rbr_weight=None, loss_ce=False,
+                 base_criterion=F.cross_entropy, load=False):
+
+        self.model = model  # handled by save()
+        self.optimizer = optimizer  # handled by save()
         self.device = device
-        self.modelname = modelname
+        self.modelname = modelname  # handled by save()
+
+        if loss_rrr_weight:
+            self.loss_function_rrr = RRRLoss(weight=loss_rrr_weight)
+
+        if torch.is_tensor(loss_rrr_gc_weight):
+            self.loss_function_rrr_gc = RRRGradCamLoss(
+                weight=loss_rrr_gc_weight)
+
+        if torch.is_tensor(loss_cdep_weight):
+            self.loss_function_cdep = CDEPLoss(weight=loss_cdep_weight)
+
+        if torch.is_tensor(loss_hint_weight):
+            self.loss_function_hint = HINTLoss(weight=loss_hint_weight)
+
+        if torch.is_tensor(loss_rbr_weight):
+            self.loss_function_rbr = RBRLoss(weight=loss_rbr_weight)
+
+        self.loss_ce = loss_ce
+        self.base_criterion = base_criterion
+
         self.run_id = str(uuid.uuid1())
         self.log_folder = 'logs/' + self.modelname
-        self.writer = SummaryWriter(log_dir='runs/' + self.modelname + "--" + self.run_id, comment="_" + \
-            self.modelname + "_id_{}".format(self.run_id))
+        self.writer = SummaryWriter(log_dir='runs/' + self.modelname + "--" + self.run_id, comment="_" +
+                                    self.modelname + "_id_{}".format(self.run_id))
         if load:
             self.load(modelname+'.pt')
 
-    def fit(self, dataloader, test_dataloader, epochs, save_best=False, save_last=True, \
-        verbose=True, verbose_after_n_epochs=1, disable_xil_loss_first_n_epochs=0):
+    def load(self, name):
+        # TODO: adapt to class implementation; may have introduced breaking changes
+        """Load the model with name from the model_store."""
+        checkpoint = torch.load(
+            'learner/model_store/' + name, map_location=torch.device(self.device))
+        self.model.load_state_dict(checkpoint['weights'])
+        epochs_ = "none"
+        if 'optimizer_dict' in checkpoint:
+            self.optimizer.load_state_dict(checkpoint['optimizer_dict'])
+        if 'rng_state' in checkpoint:
+            torch.set_rng_state(checkpoint['rng_state'].type(torch.ByteTensor))
+        if 'epochs' in checkpoint:
+            epochs_ = checkpoint['epochs']
+        print(
+            f"Model {self.modelname} loaded! Was trained on {checkpoint['loss']} for {epochs_} epochs!")
+
+    def save_learner(self, epochs=0, verbose=1, best=False):
+        pass
+        """Save the model dict to disk."""
+        # # TODO: adapt to class implementation; may have introduced breaking changes
+        # if best:
+        #    self.modelname = self.modelname + "-bestOnTrain"
+        results = {
+            'weights': self.model.state_dict(),
+            'optimizer_dict': self.optimizer.state_dict(),
+            'modelname': self.modelname,
+            'epochs': epochs,
+            'rng_state':  torch.get_rng_state()
+        }
+
+        if self.loss_function_rrr:
+            results['loss_rrr'] = str(self.loss_function_rrr)
+
+        if self.loss_function_rrr_gc:
+            results['loss_rrr_gc'] = str(self.loss_function_rrr_gc)
+
+        if self.loss_function_cdep:
+            results['loss_cdep'] = str(self.loss_function_cdep)
+
+        if self.loss_function_hint:
+            results['loss_hint'] = str(self.loss_function_hint)
+
+        if self.loss_function_rbr:
+            results['loss_rbr'] = str(self.loss_function_rbr)
+
+        # todo: add ce loss
+
+        torch.save(results, 'learner/model_store/' + self.modelname + '.pt')
+        if verbose == 1:
+            print("Model saved!")
+
+    def score(self, dataloader, criterion, verbose=False):
+        """Returns the acc and loss on the specified dataloader."""
+        size = len(dataloader.dataset)
+        self.model.eval()
+        test_loss, correct = 0, 0
+        with torch.no_grad():
+            for data in dataloader:
+                X, y = data[0].to(self.device), data[1].to(self.device)
+                logits = self.model(X)
+                output = F.softmax(logits, dim=1)
+                test_loss += criterion(output, y).item()
+                correct += (output.argmax(1) ==
+                            y).type(torch.float).sum().item()
+
+        test_loss /= size
+        correct /= size
+        if verbose:
+            print(
+                f"Test Error: Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
+        return 100*correct, test_loss
+
+    def fit(self, train_loader, test_loader, epochs, save_best_epoch=False, save_last=True,
+            verbose=True, verbose_after_n_epochs=1, disable_xil_loss_first_n_epochs=0):
         """
         Fits the learner using training data from dataloader for specified number 
         of epochs. After every epoch the learner is evaluated on the specified
@@ -56,7 +130,7 @@ class Learner:
         Writes the training progress and stats per epoch in a logfile to the logs-folder.
 
         Args:
-            dataloader: train dataloader (X, y, expl) where expl are the ground-truth user 
+            train_data: train data List[(X, y, expl)] where expl are the ground-truth user 
                 feedback masks (optional).
             test_dataloader: validation dataloader (Xt, yt).
             epochs: number of epochs to train.
@@ -68,741 +142,193 @@ class Learner:
                 falling back to the self.base_criterion. This is used to switch XIL on after 
                 n-epochs. If 0 then XIL is used for the whole training.  
         """
+
         print("Start training...")
-        bs_store = None
-        # if not os.path.exists(f"{self.log_folder}.log"):
         with open(f"{self.log_folder}.log", "w+") as f:
             f.write("epoch,acc,loss,ra_loss,rr_loss,val_acc,val_loss,time\n")
-            best_train_loss = 100000
+            best_epoch_loss = 100000
             elapsed_time = 0
 
-            if isinstance(self.loss, MixLoss8_ext) or isinstance(self.loss, MixLoss11) or isinstance(self.loss, MixLoss12) or isinstance(self.loss, MixLoss13):
-                t = open(f"./testing/{self.modelname}--loss.txt", "w")
-                t.close()
-
             for epoch in range(1, epochs+1):
-                #how_many_rawr_epoch = torch.tensor([0])
-
                 self.model.train()
-                size = len(dataloader.dataset)
-                # ra_loss = right answer, rr_loss = right reason 
-                train_loss, correct, ra_loss, rr_loss = 0, 0, 0, 0
-                start_time = time.time()
+                len_dataset = len(train_loader.dataset)
 
+                # sums of losses within epoch
+                epoch_loss_right_answer = 0.
+                epoch_loss_right_reason = 0.
+                epoch_loss_hint = 0.
+                epoch_loss_rrr = 0.
+                epoch_loss_rrr_gc = 0.
+                epoch_loss_cdep = 0.
+                epoch_loss_rbr = 0.
+                epoch_loss_ce = 0.
 
-                for batch, data in enumerate(dataloader):
+                epoch_correct = 0
+
+                epoch_start_time = time.time()
+
+                for batch_index, (X, y, E_pnlt, E_rwrd, counterexample_mask) in enumerate(tqdm(train_loader, unit='batch')):
                     self.optimizer.zero_grad()
-                    # functionality to disable xil_loss for n number 
-                    # of epochs beginning from first epoch
-                    if epoch > disable_xil_loss_first_n_epochs:
+                    X.requires_grad_()
 
-                        # log to terminal on switch
-                        if epoch == disable_xil_loss_first_n_epochs+1 and batch == 0 \
+                    X_ce = X[counterexample_mask]
+                    # y_ce = y[counterexample_mask]
+                    # E_pnlt_ce = E_pnlt[counterexample_mask]
+                    # E_rwrd_ce = E_rwrd[counterexample_mask]
+
+                    X = X[~counterexample_mask]
+                    y = y[~counterexample_mask]
+                    E_pnlt = E_pnlt[~counterexample_mask]
+                    E_rwrd = E_rwrd[~counterexample_mask]
+
+                    # print(f"X_ce={len(X_ce)}, y_ce={len(y_ce)}, E_pnlt_ce={len(E_pnlt_ce)}, E_rwrd_ce={len(E_rwrd_ce)}\nX_nce={len(X)}, y_nce={len(y)}, E_pnlt_nce={len(E_pnlt)}, E_rwrd_nce={len(E_rwrd)}")
+
+                    y_hat = self.model(X)
+                    epoch_correct += (y_hat.argmax(1) ==
+                                      y).type(torch.float).sum().item()
+                    loss_right_answer = self.base_criterion(y_hat, y)
+                    epoch_loss_right_answer += loss_right_answer
+                    loss = loss_right_answer
+
+                    # initialize zero loss tensors
+                    loss_right_reason = torch.tensor(0.)
+
+                    # functionality to disable xil_loss for n number of epochs beginning from first epoch
+                    if epoch <= disable_xil_loss_first_n_epochs:
+                        # continue with next batch
+                        continue
+
+                    ###################
+                    # MultiLoss START #
+                    ###################
+
+                    # log to terminal on switch
+                    if epoch == disable_xil_loss_first_n_epochs+1 and batch_index == 0 \
                             and verbose and disable_xil_loss_first_n_epochs != 0:
-                            print(f"--> XIL loss activated in epoch {epoch}!")
+                        logging.info(
+                            f"--> XIL loss activated in epoch {epoch}!")
 
-                        if isinstance(self.loss, RRRLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(X, y, expl, output)
-                        
-                        elif isinstance(self.loss, RRRGradCamLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
-                        
-                        elif isinstance(self.loss, CDEPLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
+                    logging.info(
+                        f"batch consists of {len(X)} examples and {len(X_ce)} counterexamples")
+                    # print(f"E_rwrd={E_rwrd[100]}")
 
-                        elif isinstance(self.loss, HINTLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
+                    if self.loss_function_rrr:
+                        loss_rrr = self.loss_function_rrr.forward(  # todo check implementation changes!
+                            X, y, E_rwrd, y_hat)
+                        # print(f"loss_rrr={loss_rrr}")
+                        loss_right_reason += loss_rrr
+                        epoch_loss_rrr += loss_rrr
+                        loss += loss_rrr
 
-                        elif isinstance(self.loss, HINTLoss_IG):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
+                    if self.loss_function_rrr_gc:
+                        loss_rrr_gc = self.loss_function_rrr_gc.forward(
+                            self.model, X, y, E_rwrd, y_hat, self.device)  # changes verified
+                        # print(f"loss_rrr_gc={loss_rrr_gc}")
+                        loss_right_reason += loss_rrr_gc
+                        epoch_loss_rrr_gc += loss_rrr_gc
+                        loss += loss_rrr_gc
 
-                        # elif isinstance(self.loss, HINTLoss_IG2):
-                        #     X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                        #     X.requires_grad_()
-                        #     output = self.model(X)
-                        #     expl = expl.float()
-                        #     loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
-                        
-                        elif isinstance(self.loss, RBRLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output)
+                    if self.loss_function_cdep:
+                        loss_cdep = self.loss_function_cdep.forward(
+                            self.model, X, y, E_rwrd, self.device)  # changes verified
+                        # print(f"loss_cdep={loss_cdep}")
+                        loss_right_reason += loss_cdep
+                        epoch_loss_cdep += loss_cdep
+                        loss += loss_cdep
 
-                        elif isinstance(self.loss, MixLoss1):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
+                    if self.loss_function_hint:
+                        loss_hint = self.loss_function_hint.forward(
+                            self.model, X, y, E_rwrd, self.device)  # todo check implementation changes!
+                        # print(f"loss_hint={loss_hint}")
+                        loss_right_reason += loss_hint
+                        epoch_loss_hint += loss_hint
+                        loss += loss_hint
 
-                        elif isinstance(self.loss, MixLoss2):
-                            X, y, expl_p, expl_r = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl_p = expl_p.float()
-                            expl_r = expl_r.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device)
-                        elif isinstance(self.loss, MixLoss3):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
-                        elif isinstance(self.loss, MixLoss4):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output)
-                        elif isinstance(self.loss, MixLoss5):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
-                        elif isinstance(self.loss, MixLoss6):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
-                        elif isinstance(self.loss, MixLoss7):
-                            X, y, expl_p, expl_r = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl_p = expl_p.float()
-                            expl_r = expl_r.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device)
-                        elif isinstance(self.loss, MixLoss8):
-                            X, y, expl_p, expl_r = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl_r = expl_r.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device)
-                        elif isinstance(self.loss, MixLoss8_ext):
-                            X, y, expl_p, expl_r = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl_r = expl_r.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device, epoch, self.modelname)
-                        elif isinstance(self.loss, MixLoss9):
-                            X, y, expl_p, expl_r = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl_p = expl_p.float()
-                            expl_r = expl_r.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device)
-                        elif isinstance(self.loss, MixLoss11):
-                            X, y, expl_p, expl_r = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl_p = expl_p.float()
-                            expl_r = expl_r.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device, epoch, self.modelname)
-                        elif isinstance(self.loss, MixLoss12):
-                            X, y, expl_p, expl_r = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl_p = expl_p.float()
-                            expl_r = expl_r.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device, epoch, self.modelname)
-                        elif isinstance(self.loss, MixLoss13):
-                            X, y, expl_p, expl_r = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl_p = expl_p.float()
-                            expl_r = expl_r.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device, epoch, self.modelname)
-                        elif isinstance(self.loss, MixLoss14):
-                            X, y, expl, mask = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(X, y, expl, mask, output, self.device)
-                            # loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, self.device)
-                        elif isinstance(self.loss, MixLoss15):
-                            X, y, expl, mask = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, output, self.device)
-                            # loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, self.device)
-                        elif isinstance(self.loss, MixLoss16):
-                            X, y, expl, mask = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, output, self.device)
-                            # loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, self.device)
-                        elif isinstance(self.loss, MixLoss17):
-                            X, y, expl, mask = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, output, self.device)
-                            # loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, self.device)
-                        elif isinstance(self.loss, MixLoss18):
-                            X, y, expl, mask = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, output, self.device)
-                            # loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, mask, self.device)
-                        elif isinstance(self.loss, MixLossGeneral) or isinstance(self.loss, MixLossGeneralRevised):
-                            X, y, expl_p, expl_r, mask = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device), data[3].to(self.device), data[4].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl_p, expl_r, output, self.device, mask)
+                    if self.loss_function_rbr:
+                        loss_rbr = self.loss_function_rbr.forward(
+                            self.model, X, y, E_rwrd, y_hat)  # changes verified
+                        # print(f"loss_rbr={loss_rbr}")
+                        loss_right_reason += loss_rbr
+                        epoch_loss_rbr += loss_rbr
+                        loss += loss_rbr
 
+                    # TODO
+                    # if self.loss_ce:
+                    #     self.loss_ce(X_ce)
 
-                        else:
-                            X, y = data[0].to(self.device), data[1].to(self.device)
-                            output = self.model(X)
-                            loss = self.loss(output, y)
+                    epoch_loss_right_reason += loss_right_reason
 
-                    else:
-                        X, y = data[0].to(self.device), data[1].to(self.device)
-                        output = self.model(X)
-                        loss = self.base_criterion(output, y)
+                    #################
+                    # MultiLoss END #
+                    #################
 
-                    # Backpropagation
                     loss.backward()
                     self.optimizer.step()
-                    
-                    # for calculating loss, acc per epoch
-                    train_loss += loss.item()
-                    correct += (output.argmax(1) == y).type(torch.float).sum().item()
 
-                    # for tracking right answer and right reason loss
-                    if isinstance(self.loss, (RRRLoss, HINTLoss, CDEPLoss, RBRLoss, RRRGradCamLoss, HINTLoss_IG, MixLoss1, MixLoss2,\
-                                              MixLoss3, MixLoss4, MixLoss5, MixLoss6, MixLoss7, MixLoss8, MixLoss8_ext, MixLoss9, \
-                                              MixLoss11, MixLoss12, MixLoss13, MixLoss14, MixLoss15, MixLoss16, MixLoss17, MixLoss18, MixLossGeneral, MixLossGeneralRevised)) \
-                        and (epoch) > disable_xil_loss_first_n_epochs:
-                        ra_loss += ra_loss_c #.item()
-                        rr_loss += rr_loss_c #.item()
+                # print(f"losses after epoch: right_answer={epoch_loss_right_answer}, hint={epoch_loss_hint}, rrr={epoch_loss_rrr}, rrr_gc={epoch_loss_rrr_gc}, cdep={epoch_loss_cdep}, rbr={epoch_loss_rbr}")
 
-                # if epoch in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]:
-                #     t = open(f"./testing/{self.modelname}--loss.txt", "a")
-                #     t.write(f'Epoch : {epoch} \n')
-                #     t.write(f'Right Answer Loss : {ra_loss}\n')
-                #     t.write(f'Right Reason Loss : {rr_loss}\n\n')
-                #     t.close()
+                epoch_loss_right_answer /= len_dataset
+                epoch_loss_right_reason /= len_dataset
+                epoch_correct /= len_dataset
+                epoch_loss = epoch_loss_right_answer + epoch_loss_right_reason
+                train_acc = 100. * epoch_correct
 
-                train_loss /= size
-                correct /= size
-                ra_loss /= size
-                rr_loss /= size
-                
-                train_acc = 100.*correct
-                
-                end_time = time.time()
-                elapsed_time_cur = end_time - start_time
+                elapsed_time_cur = time.time() - epoch_start_time
                 elapsed_time += elapsed_time_cur
 
-                self.writer.add_scalar('Loss/train', train_loss, epoch)
-                self.writer.add_scalar('Loss/ra', ra_loss, epoch)
-                self.writer.add_scalar('Loss/rr', rr_loss, epoch)
+                val_acc, val_loss = self.score(
+                    test_loader, self.base_criterion)
+
+                self.writer.add_scalar('Loss/train', epoch_loss, epoch)
+
+                self.writer.add_scalar(
+                    'Loss/ra', epoch_loss_right_answer, epoch)
+                self.writer.add_scalar(
+                    'Loss/rr', epoch_loss_right_reason, epoch)
+
+                self.writer.add_scalar('Loss/hint', epoch_loss_hint, epoch)
+                self.writer.add_scalar('Loss/rrr', epoch_loss_rrr, epoch)
+                self.writer.add_scalar('Loss/rrr_gc', epoch_loss_rrr_gc, epoch)
+                self.writer.add_scalar('Loss/cdep', epoch_loss_cdep, epoch)
+                self.writer.add_scalar('Loss/rbr', epoch_loss_rbr, epoch)
+                # self.writer.add_scalar('Loss/ce', epoch_loss_ce, epoch)
+
                 self.writer.add_scalar('Acc/train', train_acc, epoch)
                 self.writer.add_scalar('Time/train', elapsed_time_cur, epoch)
 
-                val_acc, val_loss = self.score(test_dataloader, self.base_criterion)
+                self.writer.add_scalar('Loss/test', val_loss, epoch)
+                self.writer.add_scalar('Acc/test', val_acc, epoch)
+
+                self.writer.flush()
 
                 # printing acc and loss
                 if verbose and (epoch % verbose_after_n_epochs == 0):
                     print(f"Epoch {epoch}| ", end='')
-                    print(f"accuracy: {(train_acc):>0.1f}%, loss: {train_loss:>8f} | ", end='')
-                    print(f"Test Error: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f}")
-                    #print(f" --number RAWR [{how_many_rawr_epoch}]")
+                    print(
+                        f"accuracy: {(train_acc):>0.1f}%, loss: {epoch_loss:>8f} | ", end='')
+                    print(
+                        f"Test Error: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f}")
+                    # print(f" --number RAWR [{how_many_rawr_epoch}]")
 
                 # test acc on test set
-                self.writer.add_scalar('Loss/test', val_loss, epoch)
-                self.writer.add_scalar('Acc/test', val_acc, epoch)
+
                 # write in logfile -> we need the logfile to see plots in Jupyter notebooks
-                f.write(f"{epoch},{(train_acc):>0.1f},{train_loss:>8f},{ra_loss:>8f},{rr_loss:>8f},{(val_acc):>0.1f},{val_loss:>8f},{elapsed_time_cur:>0.4f}\n")
-                
-                # log to terminal on switch
-                if epoch == disable_xil_loss_first_n_epochs and verbose and disable_xil_loss_first_n_epochs != 0:
-                    bs_store = (epoch, train_acc, train_loss, val_acc, val_loss)
- 
+                f.write(f"{epoch},{(train_acc):>0.1f},{epoch_loss:>8f},{epoch_loss_right_answer:>8f},{epoch_loss_right_reason:>8f},{(val_acc):>0.1f},{val_loss:>8f},{elapsed_time_cur:>0.4f}\n")
+
+                # # log to terminal on switch
+                # if epoch == disable_xil_loss_first_n_epochs and verbose and disable_xil_loss_first_n_epochs != 0:
+                #     bs_store = (epoch, train_acc, train_loss, val_acc, val_loss)
 
                 # save the current best model on val set
-                if save_best and train_loss < best_train_loss:
-                    best_train_loss = train_loss
+                if save_best_epoch and epoch_loss < best_epoch_loss:
+                    best_epoch_loss = epoch_loss
                     self.save_learner(verbose=False, best=True)
 
                 if save_last:
                     self.save_learner(verbose=False)
 
         print(f"--> Training took {elapsed_time:>4f} seconds!")
-        self.writer.flush()
         self.writer.close()
 
-        # return the train_acc and loss after last epoch
-        return train_acc, train_loss, elapsed_time, bs_store
-
-    def fit_isic(self, dataloader, test_dataloader, epochs, save_best=False, save_last=True, \
-        verbose=True, verbose_after_n_epochs=1, scheduler_=True, alternative_dataloader=None):
-        """
-        Training loop for the ISIC19 (same than fit() but with alternative_dataloader).
-        Only use for no XIL training.
-        Fits the learner using training data from dataloader for specified number 
-        of epochs. After every epoch the learner is evaluated on the specified
-        test_dataloader and the alternative_dataloader. Uses pytorch SummaryWriter 
-        to log stats for tensorboard. Writes the training progress and stats per epoch 
-        in a logfile to the logs-folder.
-
-        Args:
-            dataloader: train dataloader (X, y, expl) where expl are the ground-truth user 
-                feedback masks (optional).
-            test_dataloader: validation dataloader (Xt, yt).
-            epochs: number of epochs to train.
-            save_best: saves the best model on the train loss to file.
-            save_last: saves the model after every epoch .
-            verbose: set to False if you want no print outputs.
-            verbose_after_n_epochs: print outputs after every n epochs.
-            alternative_dataloader: another dataloader used to evaluate the model after 
-                every epoch 
-        """
-        rtpt = RTPT(name_initials='FF', experiment_name='ISIC-2019-train', max_iterations=epochs)
-        rtpt.start()
-        print("Start training...")
-        with open(f"{self.log_folder}.csv", "w") as f:
-            f.write("epoch,acc,loss,ra_loss,rr_loss,val_acc,val_loss,val2_acc,val2_loss,time\n")
-            best_train_loss = 100000
-            elapsed_time = 0
-            if scheduler_:
-                scheduler = ReduceLROnPlateau(self.optimizer, 'min', patience=8)
-                
-            for epoch in range(1, epochs+1):
-                #how_many_rawr_epoch = torch.tensor([0])
-
-                self.model.train()
-                size = len(dataloader.dataset)
-                # ra_loss = right answer, rr_loss = right reason 
-                train_loss, correct, ra_loss, rr_loss = 0, 0, 0, 0
-                start_time = time.time()
-                with tqdm(dataloader, unit="batch") as tepoch:
-                    tepoch.set_description(f"Epoch {epoch}")
-                
-                    for data in tepoch:
-                        self.optimizer.zero_grad()
-
-                        if isinstance(self.loss, RRRLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            loss, ra_loss_c, rr_loss_c = self.loss(X, y, expl, output)
-                            ##### rawr
-                            #how_many_rawr_epoch += how_many_rawr.item()
-                        
-                        elif isinstance(self.loss, RRRGradCamLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
-                        
-                        elif isinstance(self.loss, CDEPLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
-
-                        elif isinstance(self.loss, HINTLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output, self.device)
-                        
-                        elif isinstance(self.loss, RBRLoss):
-                            X, y, expl = data[0].to(self.device), data[1].to(self.device), data[2].to(self.device)
-                            X.requires_grad_()
-                            output = self.model(X)
-                            expl = expl.float()
-                            loss, ra_loss_c, rr_loss_c = self.loss(self.model, X, y, expl, output)
-
-                        else:
-                            X, y = data[0].to(self.device), data[1].to(self.device)
-                            output = self.model(X)
-                            loss = self.loss(output, y)
-
-
-                        # Backpropagation
-                        loss.backward()
-                        self.optimizer.step()
-                        
-                        # for calculating loss, acc per epoch
-                        train_loss += loss.item()
-                        correct += (output.argmax(1) == y).type(torch.float).sum().item()
-
-                        # for tracking right answer and right reason loss
-                        if isinstance(self.loss, (RRRLoss, HINTLoss, CDEPLoss, RBRLoss, RRRGradCamLoss)):
-                            ra_loss += ra_loss_c.item()
-                            rr_loss += rr_loss_c.item()
-                    
-                train_loss /= size
-                correct /= size
-                ra_loss /= size
-                rr_loss /= size
-                
-                train_acc = 100.*correct
-                
-                end_time = time.time()
-                elapsed_time_cur = int(end_time - start_time)
-                elapsed_time += int(elapsed_time_cur)
-
-                self.writer.add_scalar('Loss/train', train_loss, epoch)
-                self.writer.add_scalar('Loss/ra', ra_loss, epoch)
-                self.writer.add_scalar('Loss/rr', rr_loss, epoch)
-                self.writer.add_scalar('Acc/train', train_acc, epoch)
-                self.writer.add_scalar('Time/train', elapsed_time_cur, epoch)
-
-                val_acc, val_loss = self.score(test_dataloader, self.base_criterion)
-                val2_acc, val2_loss = 0, 0
-                if alternative_dataloader is not None:
-                    val2_acc, val2_loss = self.score(alternative_dataloader, self.base_criterion)
-                if scheduler_:
-                    scheduler.step(train_loss)
-
-                # printing acc and loss
-                if verbose and (epoch % verbose_after_n_epochs == 0):
-                    print(f"Epoch {epoch}| ", end='')
-                    print(f"Acc: {(train_acc):>0.1f}%, loss: {train_loss:>8f} | ", end='')
-                    print(f"Test: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f}", end='')
-                    if alternative_dataloader is not None:
-                        print(f"| Test_NP: Acc: {val2_acc:>0.1f}%", end='')
-                    print(f" Time: [{elapsed_time_cur}]s")
-                    logging.info(f"Epoch {epoch} | Acc: {(train_acc):>0.1f}%, loss: {train_loss:>8f} | Test: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f} | Test_NP: Acc: {val2_acc:>0.1f}%, loss: {val2_loss} | Time: [{elapsed_time_cur}]s")
-
-                # test acc on test set
-                self.writer.add_scalar('Loss/test', val_loss, epoch)
-                self.writer.add_scalar('Acc/test', val_acc, epoch)
-                self.writer.add_scalar('Loss/test_2', val2_loss, epoch)
-                self.writer.add_scalar('Acc/test_2', val2_acc, epoch)
-                # write in logfile -> we need the logfile to see plots in Jupyter notebooks
-                f.write(f"{epoch},{(train_acc):>0.1f},{train_loss:>8f},{ra_loss:>8f},{rr_loss:>8f},{(val_acc):>0.1f},{val_loss:>8f},{(val2_acc):>0.1f},{val2_loss:>8f},{elapsed_time_cur:>0.4f}\n")
- 
-
-                # save the current best model on val set
-                if save_best and train_loss < best_train_loss:
-                    best_train_loss = train_loss
-                    self.save_learner(epochs=epoch, verbose=False, best=True)
-
-                if save_last:
-                    self.save_learner(epochs=epoch, verbose=False)
-                rtpt.step()
-
-        print(f"--> Training took {int(elapsed_time)} seconds!")
-        self.writer.flush()
-        self.writer.close()
-
-        # return the train_acc and loss after last epoch
-        return train_acc, train_loss, elapsed_time
-
-    def fit_n_expl_shuffled_dataloader(self, dataloader, test_dataloader, epochs, \
-        save_best=False, save_last=True, verbose=True, verbose_after_n_epochs=1, \
-            scheduler_=True, alternative_dataloader=None):
-        """
-        Special fit method that enables to train the model with a limited 
-        number of explanations using flag entries in the train dataloader.
-        (For MNIST-> Use with n_expl set in the loading of the dataset.)
-        (Also used for ISIC19 XIL models)
-
-        Args:
-            dataloader: train dataloader (X, y, expl, flags) where expl are the ground-truth user 
-                feedback masks, flags indicate instances who have an explanation (1).
-            test_dataloader: validation dataloader (Xt, yt).
-            epochs: number of epochs to train.
-            save_best: saves the best model on the train loss to file.
-            save_last: saves the model after every epoch .
-            verbose: set to False if you want no print outputs.
-            verbose_after_n_epochs: print outputs after every n epochs.
-            scheduler_: if True then use scheduler (to adapt scheduler change code below)
-            alternative_dataloader: another dataloader used to evaluate the model after 
-                every epoch
-
-
-        Examples:
-        ... MNIST
-        train_loader, test_loader = decoy_mnist(train_shuffle=True, n_expl=500)
-        learner.fit_n_expl_shuffled_dataloader(train_loader, test_loader, epochs=64)
-
-        """
-        rtpt = RTPT(name_initials='FF', experiment_name='ISIC-2019-train', max_iterations=epochs)
-        rtpt.start()
-        print("Start training...")
-        with open(f"{self.log_folder}.csv", "w") as f:
-            f.write("epoch,n_expl,acc,loss,ra_loss,rr_loss,val_acc,val_loss,val2_acc,val2_loss,time\n")
-            best_train_loss = 100000
-            elapsed_time = 0
-
-            if scheduler_:
-                scheduler = ReduceLROnPlateau(self.optimizer, 'min', patience=8)
-            for epoch in range(1, epochs+1):
-
-                self.model.train()
-                size = len(dataloader.dataset)
-                train_loss, correct, ra_loss, rr_loss = 0, 0, 0, 0
-                start_time = time.time()
-                n_expl = 0
-
-                with tqdm(dataloader, unit="batch") as tepoch:
-                    tepoch.set_description(f"Epoch {epoch}")
-                
-                    for data in tepoch:
-                        #__import__("pdb").set_trace()
-
-                        self.optimizer.zero_grad()
-                        batch_size = data[3].shape[0]
-                
-                        flags = data[3].to(self.device)
-                        # get indices of instances that have flag 1 as these are trained with xil loss 
-                        xil_indices = torch.nonzero(flags, as_tuple=True)[0]
-                        number_of_used_expl = len(xil_indices)
-                        n_expl += number_of_used_expl
-                        # find indicices where expl not zero
-                        no_xil_indices = torch.nonzero((flags == 0), as_tuple=True)[0]
-                        # sanity check
-                        if number_of_used_expl + len(no_xil_indices) != len(flags):
-                            raise KeyError("xil_indicies and no_xil_indicies do not match flags!")
-                        
-                        ratio = number_of_used_expl / batch_size
-
-                        X, y = data[0].to(self.device), data[1].to(self.device)
-
-                        if number_of_used_expl == 0:
-                            
-                            output = self.model(X)
-                            loss = self.base_criterion(output, y)
-                            # Backpropagation
-                            loss.backward()
-                            self.optimizer.step()
-                            # for calculating loss, acc per epoch
-                            train_loss += loss.item()
-                            rr_loss_c = torch.zeros(1,)
-                            correct += (output.argmax(1) == y).type(torch.float).sum().item()
-                            # for tracking right answer and right reason loss
-                            if isinstance(self.loss, (RRRLoss, HINTLoss, CDEPLoss, RBRLoss, RRRGradCamLoss)):
-                                ra_loss += loss.item()
-                                rr_loss += rr_loss_c.item() 
-                            
-                        else:
-                            X_xil, y_xil, expl = data[0][xil_indices].to(self.device), data[1][xil_indices].to(self.device), \
-                                data[2][xil_indices].to(self.device)
-
-                            if isinstance(self.loss, RRRLoss):
-                                X_xil.requires_grad_()
-                                output = self.model(X_xil)
-                                loss_xil, ra_loss_c, rr_loss_c = self.loss(X_xil, y_xil, expl, output)
-                                
-                            elif isinstance(self.loss, RRRGradCamLoss):
-                                X_xil.requires_grad_()
-                                output = self.model(X_xil)
-                                expl = expl.float()
-                                loss_xil, ra_loss_c, rr_loss_c = self.loss(self.model, X_xil, y_xil, expl, output, self.device)
-                            
-                            elif isinstance(self.loss, CDEPLoss):
-                                output = self.model(X_xil)
-                                expl = expl.float()
-                                loss_xil, ra_loss_c, rr_loss_c = self.loss(self.model, X_xil, y_xil, expl, output, self.device)
-
-                            elif isinstance(self.loss, HINTLoss):
-                                X_xil.requires_grad_()
-                                output = self.model(X_xil)
-                                expl = expl.float()
-                                loss_xil, ra_loss_c, rr_loss_c = self.loss(self.model, X_xil, y_xil, expl, output, self.device)
-                            
-                            elif isinstance(self.loss, RBRLoss):
-                                X_xil.requires_grad_()
-                                output = self.model(X_xil)
-                                expl = expl.float()
-                                loss_xil, ra_loss_c, rr_loss_c = self.loss(self.model, X_xil, y_xil, expl, output)
-                            else:
-                                raise Exception
-
-                            # if the whole batch is trained with XIL loss
-                            if ratio == 1.:
-                                loss = loss_xil
-                                if isinstance(self.loss, (RRRLoss, HINTLoss, CDEPLoss, RBRLoss, RRRGradCamLoss)):
-                                    ra_loss += ra_loss_c.item()
-                                    rr_loss += rr_loss_c.item() 
-                            
-                            else: # merge right answer loss with rr loss
-                                # we only want the rr loss beacuse we calculating the ra loss 
-                                # for every example in the batch
-                                output = self.model(X)
-                                loss_no_xil = self.base_criterion(output, y)
-
-                                loss = rr_loss_c + loss_no_xil
-                                # for tracking right answer and right reason loss
-                                if isinstance(self.loss, (RRRLoss, HINTLoss, CDEPLoss, RBRLoss, RRRGradCamLoss)):
-                                    ra_loss += loss_no_xil.item()
-                                    rr_loss += rr_loss_c.item() 
-
-                            # Backpropagation
-                            loss.backward()
-                            self.optimizer.step()
-                        
-                            # for calculating loss, acc per epoch
-                            train_loss += loss.item()
-                            correct += (output.argmax(1) == y).type(torch.float).sum().item()
-                    
-                train_loss /= size
-                correct /= size
-                ra_loss /= size
-                rr_loss /= size
-                
-                train_acc = 100.*correct
-                
-                end_time = time.time()
-                elapsed_time_cur = int(end_time - start_time)
-                elapsed_time += int(elapsed_time_cur)
-
-                self.writer.add_scalar('Loss/train', train_loss, epoch)
-                self.writer.add_scalar('Loss/ra', ra_loss, epoch)
-                self.writer.add_scalar('Loss/rr', rr_loss, epoch)
-                self.writer.add_scalar('Acc/train', train_acc, epoch)
-                self.writer.add_scalar('Time/train', elapsed_time_cur, epoch)
-
-                val_acc, val_loss = self.score(test_dataloader, self.base_criterion)
-
-                val2_acc, val2_loss = 0, 0
-                if alternative_dataloader is not None:
-                    val2_acc, val2_loss = self.score(alternative_dataloader, self.base_criterion)
-
-                if scheduler_:
-                    scheduler.step(train_loss)
-
-                # printing acc and loss
-                if verbose and (epoch % verbose_after_n_epochs == 0):
-                    print(f"Epoch {epoch}| ", end='')
-                    print(f"Acc: {(train_acc):>0.1f}%, loss: {train_loss:>8f}, rr_loss: {rr_loss} | ", end='')
-                    print(f"Test: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f} | n_expl={n_expl}", end='')
-                    if alternative_dataloader is not None:
-                        print(f"| Test_NP: Acc: {val2_acc:>0.1f}%", end='')
-                    print(f" Time: [{elapsed_time_cur}]s")
-                    logging.info(f"Epoch {epoch} | Acc: {(train_acc):>0.1f}%, loss: {train_loss:>8f} | Test: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f} | Test_NP: Acc: {val2_acc:>0.1f}%, loss: {val2_loss} | Time: [{elapsed_time_cur}]s | n_expl={n_expl}")
-                    #print(f" --number RAWR [{how_many_rawr_epoch}]")
-
-                # test acc on test set
-                self.writer.add_scalar('Loss/test', val_loss, epoch)
-                self.writer.add_scalar('Acc/test', val_acc, epoch)
-                self.writer.add_scalar('Loss/test_2', val2_loss, epoch)
-                self.writer.add_scalar('Acc/test_2', val2_acc, epoch)
-                # write in logfile -> we need the logfile to see plots in Jupyter notebooks
-                f.write(f"{epoch},{n_expl},{(train_acc):>0.2f},{train_loss:>12f},{ra_loss:>12f},{rr_loss:>12f},{(val_acc):>0.2f},{val_loss:>12f},{(val2_acc):>0.2f},{val2_loss:>12f},{elapsed_time_cur:>0.4f}\n")
-
-                # save the current best model on val set
-                if save_best and train_loss < best_train_loss:
-                    best_train_loss = train_loss
-                    self.save_learner(epochs=epoch, verbose=False, best=True)
-
-                if save_last:
-                    self.save_learner(epochs=epoch, verbose=False)
-                
-                rtpt.step()
-
-        print(f"--> Training took {int(elapsed_time)} seconds!")
-        self.writer.flush()
-        self.writer.close()
-
-        # return the train_acc and loss after last epoch
-        return train_acc, train_loss, elapsed_time
-
-
-    def score(self, dataloader, criterion, verbose=False):
-        """Returns the acc and loss on the specified dataloader."""
-        size = len(dataloader.dataset)
-        self.model.eval()
-        test_loss, correct = 0, 0
-        with torch.no_grad():
-            for data in dataloader:
-                X, y = data[0].to(self.device), data[1].to(self.device)
-                output = F.softmax(self.model(X), dim=1)
-                test_loss += criterion(output, y).item()
-                correct += (output.argmax(1) == y).type(torch.float).sum().item()
-
-        test_loss /= size
-        correct /= size
-        if verbose:
-            print(f"Test Error: Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
-        return 100*correct, test_loss
-
-    def save_learner(self, epochs=0, verbose=1, best=False):
-        """Save the model dict to disk."""
-        #if best:
-        #    self.modelname = self.modelname + "-bestOnTrain"
-        results = {'weights': self.model.state_dict(), \
-            'optimizer_dict': self.optimizer.state_dict() ,'modelname' : self.modelname, \
-            'loss' : str(self.loss), 'epochs': epochs, \
-            'rng_state' :  torch.get_rng_state()}
-        torch.save(results, 'learner/model_store/' + self.modelname + '.pt')
-        if verbose == 1:
-            print("Model saved!")
-
-    def load(self, name):
-        """Load the model with name from the model_store."""
-        checkpoint = torch.load('learner/model_store/'+ name, map_location=torch.device(self.device))
-        self.model.load_state_dict(checkpoint['weights'])
-        epochs_ = "none"
-        if 'optimizer_dict' in checkpoint:
-            self.optimizer.load_state_dict(checkpoint['optimizer_dict'])
-        if 'rng_state' in checkpoint:
-            torch.set_rng_state(checkpoint['rng_state'].type(torch.ByteTensor))
-        if 'epochs' in checkpoint:
-            epochs_ = checkpoint['epochs']
-        print(f"Model {self.modelname} loaded! Was trained on {checkpoint['loss']} for {epochs_} epochs!")
-
-
-    def validation_statistics(self, dataloader, criterion=F.cross_entropy, class_labels=None, \
-        save=True, savename="-stats"):
-        """Calculates confusion matrix and different statistics on dataloader."""
-
-        size = len(dataloader.dataset)
-        y_pred_list = []
-        y_val_list = []
-        self.model.eval()
-        test_loss, correct = 0, 0
-        with torch.no_grad():
-            for data in dataloader:
-                X, y = data[0].to(self.device), data[1].to(self.device)
-                output = self.model(X)
-                _, preds = output.max(1)
-                test_loss += criterion(output, y).item()
-                correct += (output.argmax(1) == y).type(torch.float).sum().item()
-                y_val_list += y.detach().cpu().tolist()
-                y_pred_list += preds.detach().cpu().tolist()
-        test_loss /= size
-        correct /= size
-        
-        cm = confusion_matrix(y_val_list, y_pred_list, labels=class_labels)
-        cr = classification_report(y_val_list, y_pred_list, labels=class_labels)
-        print(f"Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
-        print("\nCONFUSION MATRIX ------------\n")
-        print(f"{cm}")
-        print("\nCLASSIFICATION REPORT ------------\n")
-        print(f"{cr}")
-
-        if save:
-            with open(f"{self.log_folder}{savename}.txt", "w") as f:
-                f.write(f"Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}\n")
-                f.write("Confusion matrix:\n")
-                f.write(f"{cm}\n")
-                f.write("Classification report:\n")
-                f.write(f"{cr}")
-
-
-    def config_to_string(self):
-        return self.modelname + ' -- loss=' + str(self.loss) + ' -- optim=' + str(self.optimizer)  
-
+        # # return the train_acc and loss after last epoch
+        # return train_acc, train_loss, elapsed_time, bs_store

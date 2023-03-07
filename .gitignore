@@ -2,9 +2,6 @@
 test.sh
 test2.sh
 __pycache__/
-data_store/rawdata/MNIST
-data_store/__pycache__
-data_store/rawdata/__pycache__
 img_wr_metric
 testing
 xil_methods/__pycache__
@@ -12,8 +9,10 @@ xil_methods/cd_util/__pycache__
 learner/model_store
 learner/__pycache__
 learner/models/__pycache__
-logs
 output_images
 output_wr_metric
-runs
+data_store/rawdata/
+logs/
+runs/
 venv/
+.vscode/
