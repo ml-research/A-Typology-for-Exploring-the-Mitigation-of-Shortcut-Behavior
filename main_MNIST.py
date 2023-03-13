@@ -1,3 +1,6 @@
+import logging
+logging.basicConfig(level=logging.INFO)
+
 """Example calls to plot heatmaps and calculate WR on ISIC19."""
 import torch
 from learner.models import dnns
@@ -31,15 +34,14 @@ util.seed_all(SEED[0])
 model = dnns.SimpleConvNet().to(DEVICE)
 
 train_loader, test_loader = decoy_mnist_all_revised(
-    fmnist=True, train_shuffle=SHUFFLE, device=DEVICE, batch_size=BATCH_SIZE, generate_counterexamples=True)
+    fmnist=True, train_shuffle=SHUFFLE, device=DEVICE, batch_size=BATCH_SIZE, generate_counterexamples=True, reduced_dataset_size=BATCH_SIZE)
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 learner = Learner(model, optimizer, DEVICE, MODELNAME,
                            loss_rrr_weight=1.0,
-                           loss_rrr_gc_weight=torch.Tensor([1.] * 10),
-                           loss_cdep_weight=torch.Tensor([1.] * 10),
-                           loss_hint_weight=torch.Tensor([1.] * 10),
-                           loss_rbr_weight=torch.Tensor([1.] * 10),
-                           loss_ce=True
+                           loss_weight_rrr_gc=torch.Tensor([1.] * 10),
+                           loss_weight_cdep=torch.Tensor([1.] * 10),
+                           loss_weight_hint=torch.Tensor([1.] * 10),
+                           loss_weight_rbr=torch.Tensor([1.] * 10),
                            )
 learner.fit(train_loader, test_loader, EPOCHS, save_best_epoch=SAVE_BEST_EPOCH,
             verbose_after_n_epochs=VERBOSE_AFTER_N_EPOCHS)
