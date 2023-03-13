@@ -1786,7 +1786,7 @@ def isic_2019_hint(batch_size=16, train_shuffle=True, number_nc=None, number_c=N
 
 def decoy_mnist_all_revised(fmnist=False, batch_size=256, device='cuda', train_shuffle=False, \
                     test_shuffle=False,feedback=None, n_expl=None, flatten=False, \
-                    n_instances=-1, n_counterexamples_per_instance=1, generate_counterexamples=False, counterexample_strategy='random'):
+                    n_instances=-1, n_counterexamples_per_instance=1, generate_counterexamples=False, counterexample_strategy='random', reduced_dataset_size=None):
    
     if fmnist:
         _, X, y, E_pnlt, E_rwrd, _, Xt, yt, Et, _ = load_decoy_mnist.generate_dataset( \
@@ -1906,6 +1906,7 @@ def decoy_mnist_all_revised(fmnist=False, batch_size=256, device='cuda', train_s
         zero = np.zeros(60000, dtype=int) # next 60000 are CE
         counterexample_mask = np.append(one, zero) # 1 = non CE, 0 = CE
 
+        # just fill-up explanations with the non-ce values (won't be used)
         E_rwrd = np.append(E_rwrd, E_ce)
         E_pnlt = np.append(E_pnlt, E_ce)
 
@@ -1939,14 +1940,20 @@ def decoy_mnist_all_revised(fmnist=False, batch_size=256, device='cuda', train_s
         flags = torch.from_numpy(flags).to(device)
 
 
-    print(f"X.shape={X.shape}, Xt.shape={Xt.shape}, y.shape={y.shape}, yt.shape={yt.shape}")
+    logging.debug(f"X.shape={X.shape}, Xt.shape={Xt.shape}, y.shape={y.shape}, yt.shape={yt.shape}")
 
     if n_expl:
         train, test = TensorDataset(X, y, E_pnlt, E_rwrd, counterexample_mask, flags), TensorDataset(Xt, yt, Et)
     else:
         train, test = TensorDataset(X, y, E_pnlt, E_rwrd, counterexample_mask), TensorDataset(Xt, yt, Et)
 
-    # train = Subset(train, range(10))
-    # test = Subset(test, range(10))
+    if reduced_dataset_size:
+        train_start, train_end = int((len(train) - reduced_dataset_size) / 2), int((len(train) + reduced_dataset_size) / 2)
+        test_start, test_end = int((len(test) - reduced_dataset_size) / 2), int((len(test) + reduced_dataset_size) / 2)
+
+        train = Subset(train, range(train_start, train_end))
+        #test = Subset(test, range(test_start, test_end))
+
+        logging.warn(f"running with reduced_dataset_size={reduced_dataset_size}! train_indices={train_start}:{train_end}, test_indices={test_start}:{test_end}")
 
     return DataLoader(train, batch_size, train_shuffle), DataLoader(test, batch_size, test_shuffle)
