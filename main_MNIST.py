@@ -3,44 +3,61 @@ from data_store.datasets import decoy_mnist_all_revised
 from learner.learner import Learner
 from learner.models import dnns
 import torch
-
+import argparse
 import logging
 logging.basicConfig(level=logging.INFO)
 
+parser = argparse.ArgumentParser(prog="MultiLoss (F)MNIST")
+parser.add_argument('-s', '--seed', type=int, default=0)
+parser.add_argument('-f', '--fmnist', action='store_true')
+parser.add_argument('-b', '--batch-size', type=int, default=250)
+parser.add_argument('-lr', '--learning-rate', type=float, default=1e-3)
+parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
+parser.add_argument('-e', '--epochs', type=int, default=50)
+parser.add_argument('-sb', '--save-best-epoch', action='store_true')
+parser.add_argument('-t', '--num-threads', type=int, default=5)
+parser.add_argument('-nce', '--no-counterexamples', action='store_false')
 
-SEED = [1, 10, 100, 1000, 10000]
-SHUFFLE = True
-BATCH_SIZE = 250
-LEARNING_RATE = 0.001
-WEIGHT_DECAY = 0.0001
-EPOCHS = 50
-SAVE_BEST_EPOCH = True
-MODELNAME = 'SuperMODEL3000'
+parser.add_argument('--rrr-weight')
+parser.add_argument('--rrr-gc-weight')
+parser.add_argument('--cdep-weight')
+parser.add_argument('--hint-weight')
+parser.add_argument('--rbr-weight')
+
+args = parser.parse_args()
+
+logging.info(f'cli args: {args}')
+
+MODELNAME = 'MultiLoss(F)MNIST'
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f"Compute DEVICE={DEVICE}")
 
 from rtpt import RTPT
 rtpt = RTPT(
     name_initials='EW',
-    experiment_name='main_MNIST', 
-    max_iterations=EPOCHS
+    experiment_name=MODELNAME, 
+    max_iterations=args.epochs
 )
 
 torch.set_printoptions(linewidth=150)
-torch.set_num_threads(5)
-util.seed_all(SEED[0])  # TODO allow seed selection
+torch.set_num_threads(args.num_threads)
+util.seed_all(args.seed)
 
 train_loader, test_loader = decoy_mnist_all_revised(
-    fmnist=True,
-    train_shuffle=SHUFFLE,
+    fmnist=args.fmnist,
+    train_shuffle=True,
     device=DEVICE,
-    batch_size=BATCH_SIZE,
-    generate_counterexamples=True,
-    reduced_training_size=BATCH_SIZE
+    batch_size=args.batch_size,
+    generate_counterexamples=args.no_counterexamples,
+    reduced_training_size=args.batch_size
 )
 
 model = dnns.SimpleConvNet().to(DEVICE)
-optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+optimizer = torch.optim.Adam(
+    model.parameters(), 
+    lr=args.learning_rate, 
+    weight_decay=args.weight_decay
+)
 
 learner = Learner(
     model,
@@ -58,7 +75,6 @@ learner = Learner(
 learner.fit(
     train_loader,
     test_loader,
-    EPOCHS,
-    save_best_epoch=SAVE_BEST_EPOCH
+    args.epochs,
+    save_best_epoch=args.save_best_epoch
 )
-# avg0.append(learner.score(test_dataloader, nn.CrossEntropyLoss())[0])
