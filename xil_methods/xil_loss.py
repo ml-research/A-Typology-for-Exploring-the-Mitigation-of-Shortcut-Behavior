@@ -18,10 +18,11 @@ class RRRLoss(nn.Module):
     See https://arxiv.org/abs/1703.03717. 
     The RRR loss calculates the Input Gradients as prediction explanation and compares it
     with the (ground-truth) user explanation.
-    
+
     """
-    def __init__(self, regularizer_rate=10, base_criterion=F.cross_entropy, weight=None,\
-         rr_clipping=None):
+
+    def __init__(self, regularizer_rate=10, base_criterion=F.cross_entropy, weight=None,
+                 rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -36,9 +37,9 @@ class RRRLoss(nn.Module):
         self.regularizer_rate = regularizer_rate
         self.base_criterion = base_criterion
         self.weight = weight
-        self.rr_clipping = rr_clipping 
+        self.rr_clipping = rr_clipping
 
-    def forward(self, X, y, expl, logits, mask=None):
+    def forward(self, X, expl, logits, mask=None):
         """
         Returns (loss, right_answer_loss, right_reason_loss)
 
@@ -51,10 +52,10 @@ class RRRLoss(nn.Module):
         # get gradients w.r.t. to the input
         log_prob_ys = F.log_softmax(logits, dim=1)
         log_prob_ys.retain_grad()
-        gradXes = torch.autograd.grad(log_prob_ys, X, torch.ones_like(log_prob_ys), \
-            create_graph=True, allow_unused=True)[0]
-        
-        # if expl.shape [n,1,h,w] and gradXes.shape [n,3,h,w] then torch broadcasting 
+        gradXes = torch.autograd.grad(log_prob_ys, X, torch.ones_like(log_prob_ys),
+                                      create_graph=True, allow_unused=True)[0]
+
+        # if expl.shape [n,1,h,w] and gradXes.shape [n,3,h,w] then torch broadcasting
         # is used implicitly
         A_gradX = torch.mul(expl, gradXes) ** 2
 
@@ -67,21 +68,23 @@ class RRRLoss(nn.Module):
         right_reason_loss *= self.regularizer_rate
 
         if self.weight is not None:
-            right_reason_loss *= self.weight#[y[0]]
+            right_reason_loss *= self.weight  # [y[0]]
 
-        if self.rr_clipping is not None:
+        if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
-                right_reason_loss = right_reason_loss - right_reason_loss + self.rr_clipping
+                right_reason_loss = self.rr_clipping
 
         return right_reason_loss
+
 
 class RBRLoss(nn.Module):
     """
     Right for the Better Reasons (RBR) loss according to Shao et. al 2021.
     Using identity matrix instead of hessian.
     """
-    def __init__(self, regularizer_rate=100000, base_criterion=F.cross_entropy, \
-            rr_clipping=None, weight=None):
+
+    def __init__(self, regularizer_rate=100000, base_criterion=F.cross_entropy,
+                 rr_clipping=None, weight=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -96,10 +99,10 @@ class RBRLoss(nn.Module):
         super().__init__()
         self.regularizer_rate = regularizer_rate
         self.base_criterion = base_criterion
-        self.rr_clipping = rr_clipping # good rate for decoy mnist 1.0
+        self.rr_clipping = rr_clipping  # good rate for decoy mnist 1.0
         self.weight = weight
 
-    def forward(self, model, X, y, expl, logits, mask=None):
+    def forward(self, model, X, y, right_answer_loss, expl, logits, mask=None):
         """
         Returns (loss, right_answer_loss, right_reason_loss)
 
@@ -110,32 +113,30 @@ class RBRLoss(nn.Module):
             expl: explanation annotations masks (ones penalize regions).
             logits: model output logits. 
         """
-        # Calculate right answer loss
-        right_answer_loss = self.base_criterion(logits, y)
-
-        # use information from the influence function (IF) 
+        # use information from the influence function (IF)
         # to compute saliency maps of features and penalize features according to expl masks
 
-        ################## GET gradients of Influnece function
+        # GET gradients of Influnece function
         # get loss gradients wrt to model params
         right_answer_loss.retain_grad()
-        loss_grads_wrt_model_params_all = torch.autograd.grad(right_answer_loss, model.parameters(), \
-            torch.ones_like(right_answer_loss), create_graph=True, allow_unused=True)
-        # currently the grads are a list of every grad loss for all params wrt to the layer 
+        loss_grads_wrt_model_params_all = torch.autograd.grad(right_answer_loss, model.parameters(),
+                                                              torch.ones_like(right_answer_loss), create_graph=True, allow_unused=True)
+        # currently the grads are a list of every grad loss for all params wrt to the layer
         # --> we need to get the sum of all grads
-        loss_grads_wrt_model_params = torch.sum((torch.cat([t.flatten() for t in loss_grads_wrt_model_params_all])))
+        loss_grads_wrt_model_params = torch.sum(
+            (torch.cat([t.flatten() for t in loss_grads_wrt_model_params_all])))
         loss_grads_wrt_model_params.retain_grad()
 
-        # get loss gradients wrt to input x 
-        if_grads = torch.autograd.grad(loss_grads_wrt_model_params, X, \
-            torch.ones_like(loss_grads_wrt_model_params), create_graph=True, allow_unused=True)[0]
+        # get loss gradients wrt to input x
+        if_grads = torch.autograd.grad(loss_grads_wrt_model_params, X,
+                                       torch.ones_like(loss_grads_wrt_model_params), create_graph=True, allow_unused=True)[0]
 
-        ######### get grads of Input Gradients
+        # get grads of Input Gradients
         # get gradients w.r.t. to the input
         log_prob_ys = F.log_softmax(logits, dim=1)
         log_prob_ys.retain_grad()
-        ig_grads = torch.autograd.grad(log_prob_ys, X, torch.ones_like(log_prob_ys), \
-            create_graph=True, allow_unused=True)[0]
+        ig_grads = torch.autograd.grad(log_prob_ys, X, torch.ones_like(log_prob_ys),
+                                       create_graph=True, allow_unused=True)[0]
 
         # Right reason = regularizer x (IF grads x IG grads)**2
 
@@ -153,11 +154,12 @@ class RBRLoss(nn.Module):
         if self.weight is not None:
             right_reason_loss *= self.weight[y[0]]
 
-        if self.rr_clipping is not None:
+        if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
-                right_reason_loss = right_reason_loss - right_reason_loss + self.rr_clipping
+                right_reason_loss = self.rr_clipping
 
         return right_reason_loss
+
 
 class RRRGradCamLoss(nn.Module):
     """
@@ -167,8 +169,8 @@ class RRRGradCamLoss(nn.Module):
     Note: Can only be applied to CNNs.
     """
 
-    def __init__(self, regularizer_rate=1, base_criterion=F.cross_entropy, reduction='sum',\
-        last_conv_specified=False, weight=None, rr_clipping=None):
+    def __init__(self, regularizer_rate=1, base_criterion=F.cross_entropy, reduction='sum',
+                 last_conv_specified=False, weight=None, rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -214,21 +216,22 @@ class RRRGradCamLoss(nn.Module):
             last_conv_layer = util.get_last_conv_layer(model)
             explainer = LayerGradCam(model, last_conv_layer)
 
-        saliencies = explainer.attribute(X, target=log_ys, relu_attributions=False)
+        saliencies = explainer.attribute(
+            X, target=log_ys, relu_attributions=False)
         # apply relu by hand, or check neg values for GradCam meaning
         # normalize grads [0-1] to compare them to expl masks --> includes pos and neg values
         norm_saliencies = util.norm_saliencies_fast(saliencies)
-        
+
         # downsample expl masks to match saliency masks
         h, w = norm_saliencies.shape[2], norm_saliencies.shape[3]
-        downsampled_expl = transforms.Resize((h,w))(expl)
-        
+        downsampled_expl = transforms.Resize((h, w))(expl)
+
         attr = torch.mul(downsampled_expl, norm_saliencies) ** 2
 
         right_reason_loss = torch.zeros(1,).to(device)
 
         if self.weight is not None:
-            attr = torch.sum(attr, dim=(1,2,3))
+            attr = torch.sum(attr, dim=(1, 2, 3))
             for i in range(len(self.weight)):
                 class_indices_i = torch.nonzero((y == i), as_tuple=True)[0]
                 attr[class_indices_i] *= self.weight[i]
@@ -245,20 +248,21 @@ class RRRGradCamLoss(nn.Module):
 
         right_reason_loss *= self.regularizer_rate
 
-
-        if self.rr_clipping is not None:
+        if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
-                right_reason_loss = right_reason_loss - right_reason_loss + self.rr_clipping
+                right_reason_loss = self.rr_clipping
 
         return right_reason_loss
+
 
 class CDEPLoss(nn.Module):
     """
     CDEP loss as proposed by Rieger et. al 2020.
     See https://github.com/laura-rieger/deep-explanation-penalization.
     """
-    def __init__(self, regularizer_rate=1000000, base_criterion=F.cross_entropy, weight=None, \
-        model_type='mnist', rr_clipping=None):
+
+    def __init__(self, regularizer_rate=1000000, base_criterion=F.cross_entropy, weight=None,
+                 model_type='mnist', rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -288,24 +292,27 @@ class CDEPLoss(nn.Module):
             y: Ground-truth labels.
             expl: Explanation annotations matrix (ones penalize regions).
         """
-        #rel, irrel = cd.cd(expl, X, model, model_type=model_type, device=device)
+        # rel, irrel = cd.cd(expl, X, model, model_type=model_type, device=device)
         right_reason_loss = torch.zeros(1,).to(device)
-        
-        # calculate Contextual Decompostions (CD)
-        rel, irrel = cd.cd(X, model, expl, device=device, model_type=self.model_type)
 
-        right_reason_loss += F.softmax(torch.stack((rel.view(-1), irrel.view(-1)), dim=1), dim=1)[:, 0].mean()
+        # calculate Contextual Decompostions (CD)
+        rel, irrel = cd.cd(X, model, expl, device=device,
+                           model_type=self.model_type)
+
+        right_reason_loss += F.softmax(torch.stack(
+            (rel.view(-1), irrel.view(-1)), dim=1), dim=1)[:, 0].mean()
 
         right_reason_loss *= self.regularizer_rate
 
         if self.weight is not None:
             right_reason_loss *= self.weight[y[0]]
 
-        if self.rr_clipping is not None:
+        if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
-                right_reason_loss = right_reason_loss  - right_reason_loss + self.rr_clipping
+                right_reason_loss = self.rr_clipping
 
         return torch.squeeze(right_reason_loss)
+
 
 class HINTLoss(nn.Module):
     """
@@ -316,8 +323,8 @@ class HINTLoss(nn.Module):
     of penalizing wrong reason it rewards right reason.
     """
 
-    def __init__(self, regularizer_rate=100, base_criterion=F.cross_entropy, reduction='sum', \
-        last_conv_specified=False, upsample=False, weight=None, positive_only=False, rr_clipping=None):
+    def __init__(self, regularizer_rate=100, base_criterion=F.cross_entropy, reduction='sum',
+                 last_conv_specified=False, upsample=False, weight=None, positive_only=False, rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -345,7 +352,6 @@ class HINTLoss(nn.Module):
         self.positive_only = positive_only
         self.rr_clipping = rr_clipping
 
-
     def forward(self, model, X, y, expl, device, mask=None):
         """
         Returns (loss, right_answer_loss, right_reason_loss)
@@ -359,7 +365,7 @@ class HINTLoss(nn.Module):
             device: either 'cpu' or 'cuda' 
         """
         # human importance map = expl: -> array {0,1} region with high importance have ones
-        # calculate right answer loss 
+        # calculate right answer loss
         model.eval()
 
         # network importance score --> compute GradCam attribution of last conv layer
@@ -368,43 +374,47 @@ class HINTLoss(nn.Module):
         else:
             last_conv_layer = util.get_last_conv_layer(model)
             explainer = LayerGradCam(model, last_conv_layer)
-        
+
         saliencies = explainer.attribute(X, target=y, relu_attributions=False)
         # normalize grads [0-1] to compare them to expl masks
         # norm_saliencies = util.norm_saliencies(saliencies)
-        norm_saliencies = util.norm_saliencies_fast(saliencies, positive_only=self.positive_only)
+        norm_saliencies = util.norm_saliencies_fast(
+            saliencies, positive_only=self.positive_only)
 
         right_reason_loss = torch.zeros(1,).to(device)
 
-        if self.upsample: # upsample saliency masks to match expl masks
-            # resize grad attribution to match explanation size 
+        if self.upsample:  # upsample saliency masks to match expl masks
+            # resize grad attribution to match explanation size
             h, w = expl.shape[2], expl.shape[3]
-            upsampled_saliencies = LayerAttribution.interpolate(norm_saliencies, (h, w))
+            upsampled_saliencies = LayerAttribution.interpolate(
+                norm_saliencies, (h, w))
             if mask is not None:
                 for i in range(len(expl)):
                     upsampled_saliencies[i] = mask[i] * upsampled_saliencies[i]
                     expl[i] = mask[i] * expl[i]
                 # print("!!! MASK NOT NONE !!!")
-            attr = F.mse_loss(upsampled_saliencies, expl, reduction=self.reduction)
-        
-        else: # downsample expl masks to match saliency masks
+            attr = F.mse_loss(upsampled_saliencies, expl,
+                              reduction=self.reduction)
+
+        else:  # downsample expl masks to match saliency masks
             h, w = norm_saliencies.shape[2], norm_saliencies.shape[3]
-            downsampled_expl = transforms.Resize((h,w))(expl)
+            downsampled_expl = transforms.Resize((h, w))(expl)
             if mask is not None:
                 for i in range(len(expl)):
                     downsampled_expl[i] = mask[i] * downsampled_expl[i]
                     norm_saliencies[i] = mask[i] * norm_saliencies[i]
                 # print("!!! MASK NOT NONE !!!")
-            #right_reason_loss += F.mse_loss(norm_saliencies, downsampled_expl, reduction='none')
-            attr = F.mse_loss(norm_saliencies, downsampled_expl, reduction=self.reduction)
+            # right_reason_loss += F.mse_loss(norm_saliencies, downsampled_expl, reduction='none')
+            attr = F.mse_loss(norm_saliencies, downsampled_expl,
+                              reduction=self.reduction)
 
         if self.weight is not None and self.reduction == 'none':
-            attr = torch.sum(attr, dim=(1,2,3))
+            attr = torch.sum(attr, dim=(1, 2, 3))
             for i in range(len(self.weight)):
                 class_indices_i = torch.nonzero((y == i), as_tuple=True)[0]
                 attr[class_indices_i] *= self.weight[i]
-        
-        if self.reduction == 'sum': 
+
+        if self.reduction == 'sum':
             right_reason_loss += torch.sum(attr)
         elif self.reduction == 'mean':
             right_reason_loss += torch.sum(attr) / len(X)
@@ -412,12 +422,13 @@ class HINTLoss(nn.Module):
         right_reason_loss *= self.regularizer_rate
 
         # Human-Network Importance Alignment via loss
-        if self.rr_clipping is not None:
+        if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
-                right_reason_loss = right_reason_loss  - right_reason_loss + self.rr_clipping
+                right_reason_loss = self.rr_clipping
 
-        model.train() # probably useless
+        model.train()  # probably useless
         return torch.squeeze(right_reason_loss)
+
 
 class HINTLoss_IG(nn.Module):
     """
@@ -436,8 +447,6 @@ class HINTLoss_IG(nn.Module):
                 (increases run time).
             upsample: if True then the saliency masks of the model are upsampled to match
                 the user explanation masks. If False then the user expl masks are downsampled.
-            weight: if specified then weight right reason loss by classes. Tensor
-                with shape (c,) c=classes.
             positive_only: if True all negative attribution gets zero.
             rr_clipping: sets the max right reason loss to specified value -> Helps smoothing
                 and stabilizing training process.
@@ -455,7 +464,8 @@ class HINTLoss_IG(nn.Module):
         # get gradients w.r.t. to the input
         log_prob_ys = F.log_softmax(logits, dim=1)
         log_prob_ys.retain_grad()
-        gradXes = torch.autograd.grad(log_prob_ys, X, torch.ones_like(log_prob_ys), create_graph=True, allow_unused=True)[0]
+        gradXes = torch.autograd.grad(log_prob_ys, X, torch.ones_like(
+            log_prob_ys), create_graph=True, allow_unused=True)[0]
 
         A_gradX = F.mse_loss(gradXes, expl, reduction=self.reduction)
 
@@ -469,9 +479,9 @@ class HINTLoss_IG(nn.Module):
         right_reason_loss *= self.regularizer_rate
 
         # Human-Network Importance Alignment via loss
-        if self.rr_clipping is not None:
+        if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
-                right_reason_loss = right_reason_loss - right_reason_loss + self.rr_clipping
+                right_reason_loss = self.rr_clipping
 
         model.train()  # probably useless
         return right_reason_loss
