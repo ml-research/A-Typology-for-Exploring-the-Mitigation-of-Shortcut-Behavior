@@ -1948,6 +1948,8 @@ def decoy_mnist_all_revised(fmnist=False, batch_size=256, device='cuda', train_s
         train, test = TensorDataset(X, y, E_pnlt, E_rwrd, counterexample_mask), TensorDataset(Xt, yt, Et)
 
     if reduced_training_size:
+        # train contains 50% counterexamples and 50% non-counterexamples
+        # when subsetting to N instances we want to get N/2 CEs and N/2 non-CEs and we collect them starting from the middle index
         train_start, train_end = int((len(train) - reduced_training_size) / 2), int((len(train) + reduced_training_size) / 2)
         train = Subset(train, range(train_start, train_end))
         logging.warn(f"running with reduced_training_size={reduced_training_size}! instances={train_start}:{train_end}")

@@ -25,12 +25,12 @@ class Learner:
         device: str,
         modelname: str,
         base_criterion=F.cross_entropy,
-        loss_rrr_weight=None,
-        loss_weight_rrr_gc=None,
-        loss_weight_cdep=None,
-        loss_weight_hint=None,
-        #loss_weight_hint_ig=None,
-        loss_weight_rbr=None,
+        loss_rrr_regularizer_rate=None,
+        loss_rrr_gc_regularizer_rate=None,
+        loss_cdep_regularizer_rate=None,
+        loss_hint_regularizer_rate=None,
+        loss_hint_ig_regularizer_rate=None,
+        loss_rbr_regularizer_rate=None,
         load=False
     ):
 
@@ -39,24 +39,23 @@ class Learner:
         self.device = device
         self.modelname = modelname  # handled by save()
 
-        if loss_rrr_weight:
-            self.loss_function_rrr = RRRLoss(weight=loss_rrr_weight)
+        if loss_rrr_regularizer_rate:
+            self.loss_function_rrr = RRRLoss(regularizer_rate=loss_rrr_regularizer_rate)
 
-        if torch.is_tensor(loss_weight_rrr_gc):
-            self.loss_function_rrr_gc = RRRGradCamLoss(
-                weight=loss_weight_rrr_gc)
+        if loss_rrr_gc_regularizer_rate:
+            self.loss_function_rrr_gc = RRRGradCamLoss(regularizer_rate=loss_rrr_gc_regularizer_rate)
 
-        if torch.is_tensor(loss_weight_cdep):
-            self.loss_function_cdep = CDEPLoss(weight=loss_weight_cdep)
+        if loss_cdep_regularizer_rate:
+            self.loss_function_cdep = CDEPLoss(regularizer_rate=loss_cdep_regularizer_rate)
 
-        if torch.is_tensor(loss_weight_hint):
-            self.loss_function_hint = HINTLoss(weight=loss_weight_hint)
+        if loss_hint_regularizer_rate:
+            self.loss_function_hint = HINTLoss(regularizer_rate=loss_hint_regularizer_rate)
 
-        # if torch.is_tensor(loss_weight_hint_ig):
-        #     self.loss_function_hint_ig = HINTLoss_IG()
+        if loss_hint_ig_regularizer_rate:
+            self.loss_function_hint_ig = HINTLoss_IG(regularizer_rate=loss_hint_ig_regularizer_rate)
 
-        if torch.is_tensor(loss_weight_rbr):
-            self.loss_function_rbr = RBRLoss(weight=loss_weight_rbr)
+        if loss_rbr_regularizer_rate:
+            self.loss_function_rbr = RBRLoss(regularizer_rate=loss_rbr_regularizer_rate)
 
         self.base_criterion = base_criterion
 
@@ -117,7 +116,7 @@ class Learner:
                 self.optimizer.zero_grad()
                 X.requires_grad_()
 
-                logging.info(
+                logging.debug(
                     f"batch consists of {len(X[~ce_mask])} examples and {len(X[ce_mask])} counterexamples")
 
                 # initialize zero-loss tensors (as they may be unbound)
@@ -135,7 +134,7 @@ class Learner:
                     batch_loss_right_answer_ce += self.base_criterion(
                         y_hat_ce, y_ce)
                     epoch_loss_right_answer_ce += batch_loss_right_answer_ce
-                    logging.info(
+                    logging.debug(
                         f"loss_right_answer_ce={batch_loss_right_answer_ce}")
 
                 # compute right-answer AND right-reason loss on non-CEs
@@ -146,7 +145,7 @@ class Learner:
                                       y).type(torch.float).sum().item()
                     batch_loss_right_answer = self.base_criterion(y_hat, y)
                     epoch_loss_right_answer += batch_loss_right_answer
-                    logging.info(
+                    logging.debug(
                         f"loss_right_answer={batch_loss_right_answer}")
 
                     ###################
@@ -181,12 +180,12 @@ class Learner:
                         batch_loss_right_reason += batch_loss_hint
                         epoch_loss_hint += batch_loss_hint
 
-                    # if self.loss_function_hint_ig:
-                    #     batch_loss_hint_ig = self.loss_function_hint_ig.forward(
-                    #         self.model, X, E_rwrd, y_hat, self.device)  # todo check implementation changes!
-                    #     # print(f"loss_hint={loss_hint}")
-                    #     batch_loss_right_reason += batch_loss_hint_ig
-                    #     epoch_loss_hint_ig += batch_loss_hint_ig
+                    if self.loss_function_hint_ig:
+                        batch_loss_hint_ig = self.loss_function_hint_ig.forward(
+                            self.model, X, E_rwrd, y_hat, self.device)  # todo check implementation changes!
+                        print(f"loss_hint={batch_loss_hint_ig}")
+                        batch_loss_right_reason += batch_loss_hint_ig
+                        epoch_loss_hint_ig += batch_loss_hint_ig
 
                     if self.loss_function_rbr:
                         batch_loss_rbr = self.loss_function_rbr.forward(
@@ -196,7 +195,7 @@ class Learner:
                         epoch_loss_rbr += batch_loss_rbr
 
                     epoch_loss_right_reason += batch_loss_right_reason
-                    logging.info(
+                    logging.debug(
                         f"loss_right_reason={batch_loss_right_reason}")
 
                     #################
@@ -252,7 +251,7 @@ class Learner:
             self.tensorboard_writer.add_scalar('Acc/test', val_acc, epoch)
             self.tensorboard_writer.flush()
 
-            logging.info(
+            logging.debug(
                 f"Epoch {epoch}| accuracy: {(train_acc):>0.1f}%, loss: {epoch_loss:>8f} | Test Error: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f}")
 
             # write in logfile -> we need the logfile to see plots in Jupyter notebooks
@@ -301,7 +300,7 @@ class Learner:
             'optimizer_dict': self.optimizer.state_dict(),
             'modelname': self.modelname,
             'epochs': epochs,
-            'rng_state':  torch.get_rng_state()
+            'rng_state': torch.get_rng_state()
         }
 
         if self.loss_function_rrr:
@@ -344,6 +343,6 @@ class Learner:
                 f"Test Error: Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
         return 100*correct, test_loss
 
-    def __del__(self):
-        self.log_writer.close()
-        self.tensorboard_writer.close()
+    # def __del__(self):
+    #     self.log_writer.close()
+    #     self.tensorboard_writer.close()

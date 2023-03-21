@@ -16,7 +16,7 @@ parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
 parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('-sb', '--save-best-epoch', action='store_true')
 parser.add_argument('-t', '--num-threads', type=int, default=5)
-parser.add_argument('-nce', '--no-counterexamples', action='store_false')
+parser.add_argument('-nce', '--no-counterexamples', action='store_true')
 
 parser.add_argument('--rrr-weight')
 parser.add_argument('--rrr-gc-weight')
@@ -48,8 +48,8 @@ train_loader, test_loader = decoy_mnist_all_revised(
     train_shuffle=True,
     device=DEVICE,
     batch_size=args.batch_size,
-    generate_counterexamples=args.no_counterexamples,
-    reduced_training_size=args.batch_size
+    generate_counterexamples=not args.no_counterexamples,
+    #reduced_training_size=args.batch_size*100
 )
 
 model = dnns.SimpleConvNet().to(DEVICE)
@@ -64,12 +64,12 @@ learner = Learner(
     optimizer,
     DEVICE,
     MODELNAME,
-    loss_rrr_weight=1.0,
-    loss_weight_rrr_gc=torch.Tensor([1.] * 10),
-    loss_weight_cdep=torch.Tensor([1.] * 10),
-    loss_weight_hint=torch.Tensor([1.] * 10),
-    # loss_weight_hint_ig=torch.Tensor([1.] * 10),
-    loss_weight_rbr=torch.Tensor([1.] * 10),
+    loss_rrr_regularizer_rate=100,
+    loss_rrr_gc_regularizer_rate=1,
+    loss_cdep_regularizer_rate=2_000_000,
+    loss_hint_regularizer_rate=0.000_001,
+    loss_hint_ig_regularizer_rate=1,
+    loss_rbr_regularizer_rate=10_000_000,
 )
 
 learner.fit(

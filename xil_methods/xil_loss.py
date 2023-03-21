@@ -21,8 +21,7 @@ class RRRLoss(nn.Module):
 
     """
 
-    def __init__(self, regularizer_rate=10, base_criterion=F.cross_entropy, weight=None,
-                 rr_clipping=None):
+    def __init__(self, regularizer_rate=10, base_criterion=F.cross_entropy, rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -36,7 +35,7 @@ class RRRLoss(nn.Module):
         super().__init__()
         self.regularizer_rate = regularizer_rate
         self.base_criterion = base_criterion
-        self.weight = weight
+        # self.weight = weight
         self.rr_clipping = rr_clipping
 
     def forward(self, X, expl, logits, mask=None):
@@ -67,8 +66,8 @@ class RRRLoss(nn.Module):
         right_reason_loss = torch.sum(A_gradX)
         right_reason_loss *= self.regularizer_rate
 
-        if self.weight is not None:
-            right_reason_loss *= self.weight  # [y[0]]
+        # if self.weight is not None:
+        #     right_reason_loss *= [y[0]]
 
         if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
@@ -84,7 +83,7 @@ class RBRLoss(nn.Module):
     """
 
     def __init__(self, regularizer_rate=100000, base_criterion=F.cross_entropy,
-                 rr_clipping=None, weight=None):
+                 rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -100,7 +99,7 @@ class RBRLoss(nn.Module):
         self.regularizer_rate = regularizer_rate
         self.base_criterion = base_criterion
         self.rr_clipping = rr_clipping  # good rate for decoy mnist 1.0
-        self.weight = weight
+        # self.weight = weight
 
     def forward(self, model, X, y, right_answer_loss, expl, logits, mask=None):
         """
@@ -151,8 +150,8 @@ class RBRLoss(nn.Module):
         right_reason_loss = torch.sum(A_gradX)
         right_reason_loss *= self.regularizer_rate
 
-        if self.weight is not None:
-            right_reason_loss *= self.weight[y[0]]
+        # if self.weight is not None:
+        #     right_reason_loss *= self.weight[y[0]]
 
         if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
@@ -170,7 +169,7 @@ class RRRGradCamLoss(nn.Module):
     """
 
     def __init__(self, regularizer_rate=1, base_criterion=F.cross_entropy, reduction='sum',
-                 last_conv_specified=False, weight=None, rr_clipping=None):
+                 last_conv_specified=False, rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -190,7 +189,7 @@ class RRRGradCamLoss(nn.Module):
         self.base_criterion = base_criterion
         self.reduction = reduction
         self.last_conv_specified = last_conv_specified
-        self.weight = weight
+        # self.weight = weight
         self.rr_clipping = rr_clipping
 
     def forward(self, model, X, y, expl, logits, device, mask=None):
@@ -230,11 +229,11 @@ class RRRGradCamLoss(nn.Module):
 
         right_reason_loss = torch.zeros(1,).to(device)
 
-        if self.weight is not None:
-            attr = torch.sum(attr, dim=(1, 2, 3))
-            for i in range(len(self.weight)):
-                class_indices_i = torch.nonzero((y == i), as_tuple=True)[0]
-                attr[class_indices_i] *= self.weight[i]
+        # if self.weight is not None:
+        #     attr = torch.sum(attr, dim=(1, 2, 3))
+        #     for i in range(len(self.weight)):
+        #         class_indices_i = torch.nonzero((y == i), as_tuple=True)[0]
+        #         attr[class_indices_i] *= self.weight[i]
 
         if mask is not None:
             for i in range(len(attr)):
@@ -261,7 +260,7 @@ class CDEPLoss(nn.Module):
     See https://github.com/laura-rieger/deep-explanation-penalization.
     """
 
-    def __init__(self, regularizer_rate=1000000, base_criterion=F.cross_entropy, weight=None,
+    def __init__(self, regularizer_rate=1000000, base_criterion=F.cross_entropy,
                  model_type='mnist', rr_clipping=None):
         """
         Args:
@@ -278,7 +277,7 @@ class CDEPLoss(nn.Module):
         super().__init__()
         self.regularizer_rate = regularizer_rate
         self.base_criterion = base_criterion
-        self.weight = weight
+        # self.weight = weight
         self.model_type = model_type
         self.rr_clipping = rr_clipping
 
@@ -304,8 +303,8 @@ class CDEPLoss(nn.Module):
 
         right_reason_loss *= self.regularizer_rate
 
-        if self.weight is not None:
-            right_reason_loss *= self.weight[y[0]]
+        # if self.weight is not None:
+        #     right_reason_loss *= self.weight[y[0]]
 
         if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
@@ -324,7 +323,7 @@ class HINTLoss(nn.Module):
     """
 
     def __init__(self, regularizer_rate=100, base_criterion=F.cross_entropy, reduction='sum',
-                 last_conv_specified=False, upsample=False, weight=None, positive_only=False, rr_clipping=None):
+                 last_conv_specified=False, upsample=False, positive_only=False, rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -348,7 +347,7 @@ class HINTLoss(nn.Module):
         self.reduction = reduction
         self.last_conv_specified = last_conv_specified
         self.upsample = upsample
-        self.weight = weight
+        # self.weight = weight
         self.positive_only = positive_only
         self.rr_clipping = rr_clipping
 
@@ -408,11 +407,11 @@ class HINTLoss(nn.Module):
             attr = F.mse_loss(norm_saliencies, downsampled_expl,
                               reduction=self.reduction)
 
-        if self.weight is not None and self.reduction == 'none':
-            attr = torch.sum(attr, dim=(1, 2, 3))
-            for i in range(len(self.weight)):
-                class_indices_i = torch.nonzero((y == i), as_tuple=True)[0]
-                attr[class_indices_i] *= self.weight[i]
+        # if self.weight is not None and self.reduction == 'none':
+        #     attr = torch.sum(attr, dim=(1, 2, 3))
+        #     for i in range(len(self.weight)):
+        #         class_indices_i = torch.nonzero((y == i), as_tuple=True)[0]
+        #         attr[class_indices_i] *= self.weight[i]
 
         if self.reduction == 'sum':
             right_reason_loss += torch.sum(attr)
@@ -484,4 +483,4 @@ class HINTLoss_IG(nn.Module):
                 right_reason_loss = self.rr_clipping
 
         model.train()  # probably useless
-        return right_reason_loss
+        return torch.squeeze(right_reason_loss)
