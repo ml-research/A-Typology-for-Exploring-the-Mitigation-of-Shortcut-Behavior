@@ -39,23 +39,34 @@ class Learner:
         self.device = device
         self.modelname = modelname  # handled by save()
 
-        if loss_rrr_regularizer_rate:
-            self.loss_function_rrr = RRRLoss(regularizer_rate=loss_rrr_regularizer_rate)
+        self.loss_rrr_regularizer_rate = loss_rrr_regularizer_rate
+        self.loss_rrr_gc_regularizer_rate = loss_rrr_gc_regularizer_rate
+        self.loss_cdep_regularizer_rate = loss_cdep_regularizer_rate
+        self.loss_hint_regularizer_rate = loss_hint_regularizer_rate
+        self.loss_hint_ig_regularizer_rate = loss_hint_ig_regularizer_rate
+        self.loss_rbr_regularizer_rate = loss_rbr_regularizer_rate
 
-        if loss_rrr_gc_regularizer_rate:
-            self.loss_function_rrr_gc = RRRGradCamLoss(regularizer_rate=loss_rrr_gc_regularizer_rate)
 
-        if loss_cdep_regularizer_rate:
-            self.loss_function_cdep = CDEPLoss(regularizer_rate=loss_cdep_regularizer_rate)
 
-        if loss_hint_regularizer_rate:
-            self.loss_function_hint = HINTLoss(regularizer_rate=loss_hint_regularizer_rate)
+        # TODO: instead of instantiating losses just re-format them as simple functions (state-less anyways)
+        # then just save regularisation_rate instead of initialized loss class
+        self.loss_function_rrr = RRRLoss(
+            regularizer_rate=loss_rrr_regularizer_rate) if loss_rrr_regularizer_rate else None
 
-        if loss_hint_ig_regularizer_rate:
-            self.loss_function_hint_ig = HINTLoss_IG(regularizer_rate=loss_hint_ig_regularizer_rate)
+        self.loss_function_rrr_gc = RRRGradCamLoss(
+            regularizer_rate=loss_rrr_gc_regularizer_rate) if loss_rrr_gc_regularizer_rate else None
 
-        if loss_rbr_regularizer_rate:
-            self.loss_function_rbr = RBRLoss(regularizer_rate=loss_rbr_regularizer_rate)
+        self.loss_function_cdep = CDEPLoss(
+            regularizer_rate=loss_cdep_regularizer_rate) if loss_cdep_regularizer_rate else None
+
+        self.loss_function_hint = HINTLoss(
+            regularizer_rate=loss_hint_regularizer_rate) if loss_hint_regularizer_rate else None
+
+        self.loss_function_hint_ig = HINTLoss_IG(
+            regularizer_rate=loss_hint_ig_regularizer_rate) if loss_hint_ig_regularizer_rate else None
+
+        self.loss_function_rbr = RBRLoss(
+            regularizer_rate=loss_rbr_regularizer_rate) if loss_rbr_regularizer_rate else None
 
         self.base_criterion = base_criterion
 
@@ -205,6 +216,8 @@ class Learner:
                 (batch_loss_right_answer_ce + batch_loss_right_answer +
                     batch_loss_right_reason).backward()
                 self.optimizer.step()
+
+            
 
             # print(f"losses after epoch: right_answer={epoch_loss_right_answer}, hint={epoch_loss_hint}, rrr={epoch_loss_rrr}, rrr_gc={epoch_loss_rrr_gc}, cdep={epoch_loss_cdep}, rbr={epoch_loss_rbr}")
 
