@@ -18,11 +18,12 @@ parser.add_argument('-sb', '--save-best-epoch', action='store_true')
 parser.add_argument('-t', '--num-threads', type=int, default=5)
 parser.add_argument('-nce', '--no-counterexamples', action='store_true')
 
-parser.add_argument('--rrr-weight')
-parser.add_argument('--rrr-gc-weight')
-parser.add_argument('--cdep-weight')
-parser.add_argument('--hint-weight')
-parser.add_argument('--rbr-weight')
+parser.add_argument('--rrr-rr', type=int)
+parser.add_argument('--rrr-gc-rr', type=int)
+parser.add_argument('--cdep-rr', type=int)
+parser.add_argument('--hint-rr', type=int)
+parser.add_argument('--hint-ig-rr', type=int)
+parser.add_argument('--rbr-rr', type=int)
 
 args = parser.parse_args()
 
@@ -49,7 +50,7 @@ train_loader, test_loader = decoy_mnist_all_revised(
     device=DEVICE,
     batch_size=args.batch_size,
     generate_counterexamples=not args.no_counterexamples,
-    #reduced_training_size=args.batch_size*100
+    reduced_training_size=args.batch_size*10
 )
 
 model = dnns.SimpleConvNet().to(DEVICE)
@@ -59,17 +60,18 @@ optimizer = torch.optim.Adam(
     weight_decay=args.weight_decay
 )
 
+
 learner = Learner(
     model,
     optimizer,
     DEVICE,
     MODELNAME,
-    loss_rrr_regularizer_rate=100,
-    loss_rrr_gc_regularizer_rate=1,
-    loss_cdep_regularizer_rate=2_000_000,
-    loss_hint_regularizer_rate=0.000_001,
-    loss_hint_ig_regularizer_rate=1,
-    loss_rbr_regularizer_rate=10_000_000,
+    loss_rrr_regularizer_rate=args.rrr_rr,
+    loss_rrr_gc_regularizer_rate=args.rrr_gc_rr,
+    loss_cdep_regularizer_rate=args.cdep_rr,
+    loss_hint_regularizer_rate=args.hint_rr,
+    loss_hint_ig_regularizer_rate=args.hint_ig_rr,
+    loss_rbr_regularizer_rate=args.rbr_rr,
 )
 
 learner.fit(
