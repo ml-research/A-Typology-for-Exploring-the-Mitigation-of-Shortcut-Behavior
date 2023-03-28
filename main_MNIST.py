@@ -1,3 +1,4 @@
+import os
 import util
 from data_store.datasets import decoy_mnist_all_revised
 from learner.learner import Learner
@@ -5,6 +6,7 @@ from learner.models import dnns
 import torch
 import argparse
 import logging
+import explainer
 logging.basicConfig(level=logging.INFO)
 
 parser = argparse.ArgumentParser(prog="MultiLoss (F)MNIST")
@@ -50,7 +52,7 @@ train_loader, test_loader = decoy_mnist_all_revised(
     device=DEVICE,
     batch_size=args.batch_size,
     generate_counterexamples=not args.no_counterexamples,
-    reduced_training_size=args.batch_size*10
+    #reduced_training_size=args.batch_size * 10
 )
 
 model = dnns.SimpleConvNet().to(DEVICE)
@@ -78,5 +80,21 @@ learner.fit(
     train_loader,
     test_loader,
     args.epochs,
+    rtpt,
     save_best_epoch=args.save_best_epoch
 )
+
+
+
+dataset = 'fmnist' if args.fmnist else 'mnist'
+
+os.makedirs(f'output_images/{dataset}-expl/{args.mode}_saliency/', exist_ok=True)
+explainer.explain_with_captum('saliency', learner.model, test_loader, range(len(test_loader)), \
+                              next_to_each_other=False,)
+                              #save_name=f'{dataset}-expl/{args.mode}_saliency/{dataset}-{args.mode}-test-wp-grad')
+# thresh = explainer.quantify_wrong_reason('saliency', test_dataloader, learner.model, mode='mean',
+#                                             name=f'{args.mode}-saliency', wr_name=MODELNAME + "--saliency", \
+#                                             threshold=None, flags=False, device=DEVICE)
+# avg4.append(explainer.quantify_wrong_reason('saliency', test_dataloader, learner.model, mode='mean',
+#                                             name=f'{args.mode}-saliency', wr_name=MODELNAME + "--saliency", \
+#                                             threshold=thresh, flags=False, device=DEVICE))

@@ -82,7 +82,7 @@ class Learner:
         if load:
             self.load(modelname+'.pt')
 
-    def fit(self, train_loader, test_loader, epochs, save_best_epoch=False, save_last=True):
+    def fit(self, train_loader, test_loader, epochs, rtpt, save_best_epoch=False, save_last=True):
         """
         Fits the learner using training data from dataloader for specified number 
         of epochs. After every epoch the learner is evaluated on the specified
@@ -99,6 +99,7 @@ class Learner:
         """
 
         print("Start training...")
+        rtpt.start()
 
         best_epoch_loss = 100000
         elapsed_time = 0
@@ -194,7 +195,7 @@ class Learner:
                     if self.loss_function_hint_ig:
                         batch_loss_hint_ig = self.loss_function_hint_ig.forward(
                             self.model, X, E_rwrd, y_hat, self.device)  # todo check implementation changes!
-                        print(f"loss_hint={batch_loss_hint_ig}")
+                        #print(f"loss_hint={batch_loss_hint_ig}")
                         batch_loss_right_reason += batch_loss_hint_ig
                         epoch_loss_hint_ig += batch_loss_hint_ig
 
@@ -283,6 +284,8 @@ class Learner:
 
             if save_last:
                 self.save_learner(verbose=False)
+
+            rtpt.step()
 
         print(f"--> Training took {elapsed_time:>4f} seconds!")
 
