@@ -164,10 +164,10 @@ def show_explanation_overlay_grid_captum(imgs, masks, titles, figsize=(12,6), \
     fig.subplots_adjust(hspace=0.4)
 
     axs = axs.flatten()
-    # for img, mask, title, ax in zip(imgs, masks, titles, axs):
-    #     viz.visualize_image_attr(mask, img, method=method, sign=sign,\
-    #         show_colorbar=True, title=title, cmap=get_white_viridis_cmap(0,128), alpha_overlay=0.7, \
-    #             use_pyplot=False, plt_fig_axis=(fig, ax))
+    for img, mask, title, ax in zip(imgs, masks, titles, axs):
+        viz.visualize_image_attr(mask, img, method=method, sign=sign,\
+            show_colorbar=True, title=title, cmap=get_white_viridis_cmap(0,128), alpha_overlay=0.7, \
+                use_pyplot=False, plt_fig_axis=(fig, ax))
     
     if save_name is not None:
         name_ = 'output_images/' + save_name + '.png'
