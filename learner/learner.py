@@ -252,7 +252,7 @@ class Learner:
             tensorboard_writer.add_scalar('Acc/test', val_acc, epoch)
             tensorboard_writer.flush()
 
-            logging.debug(
+            logging.info(
                 f"Epoch {epoch}| accuracy: {(train_acc):>0.1f}%, loss: {epoch_loss:>8f} | Test Error: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f}")
 
             # write in logfile -> we need the logfile to see plots in Jupyter notebooks
