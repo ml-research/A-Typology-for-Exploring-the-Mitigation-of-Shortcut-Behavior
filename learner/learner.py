@@ -25,64 +25,35 @@ class Learner:
         device: str,
         modelname: str,
         base_criterion=F.cross_entropy,
-        loss_rrr_regularizer_rate=None,
-        loss_rrr_gc_regularizer_rate=None,
-        loss_cdep_regularizer_rate=None,
-        loss_hint_regularizer_rate=None,
-        loss_hint_ig_regularizer_rate=None,
-        loss_rbr_regularizer_rate=None,
+
         load=False
     ):
 
-        self.model = model  # handled by save()
-        self.optimizer = optimizer  # handled by save()
+        self.model = model  # covered by save()
+        self.optimizer = optimizer  # covered by save()
         self.device = device
-        self.modelname = modelname  # handled by save()
-
-        self.loss_rrr_regularizer_rate = loss_rrr_regularizer_rate
-        self.loss_rrr_gc_regularizer_rate = loss_rrr_gc_regularizer_rate
-        self.loss_cdep_regularizer_rate = loss_cdep_regularizer_rate
-        self.loss_hint_regularizer_rate = loss_hint_regularizer_rate
-        self.loss_hint_ig_regularizer_rate = loss_hint_ig_regularizer_rate
-        self.loss_rbr_regularizer_rate = loss_rbr_regularizer_rate
-
-
-
-        # TODO: instead of instantiating losses just re-format them as simple functions (state-less anyways)
-        # then just save regularisation_rate instead of initialized loss class
-        self.loss_function_rrr = RRRLoss(
-            regularizer_rate=loss_rrr_regularizer_rate) if loss_rrr_regularizer_rate else None
-
-        self.loss_function_rrr_gc = RRRGradCamLoss(
-            regularizer_rate=loss_rrr_gc_regularizer_rate) if loss_rrr_gc_regularizer_rate else None
-
-        self.loss_function_cdep = CDEPLoss(
-            regularizer_rate=loss_cdep_regularizer_rate) if loss_cdep_regularizer_rate else None
-
-        self.loss_function_hint = HINTLoss(
-            regularizer_rate=loss_hint_regularizer_rate) if loss_hint_regularizer_rate else None
-
-        self.loss_function_hint_ig = HINTLoss_IG(
-            regularizer_rate=loss_hint_ig_regularizer_rate) if loss_hint_ig_regularizer_rate else None
-
-        self.loss_function_rbr = RBRLoss(
-            regularizer_rate=loss_rbr_regularizer_rate) if loss_rbr_regularizer_rate else None
+        self.modelname = modelname  # covered by save()
 
         self.base_criterion = base_criterion
-
-        run_id = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")  # str(uuid.uuid1())
-
-        self.log_writer = open(f"logs/{self.modelname}_{run_id}.log", "w+")
-        self.log_writer.write(
-            "epoch,acc,loss,ra_loss,rr_loss,val_acc,val_loss,time\n")
-
-        self.tensorboard_writer = SummaryWriter(
-            log_dir=f"runs/{self.modelname}_{run_id}", comment=f"{self.modelname}_{run_id}")
 
         if load:
             self.load(modelname+'.pt')
 
-    def fit(self, train_loader, test_loader, epochs, rtpt, save_best_epoch=False, save_last=True):
+    def fit(
+            self,
+            train_loader,
+            test_loader,
+            epochs,
+            rtpt,
+            save_best_epoch=False,
+            save_last=True,
+            loss_rrr_regularizer_rate=None,
+            loss_rrr_gc_regularizer_rate=None,
+            loss_cdep_regularizer_rate=None,
+            loss_hint_regularizer_rate=None,
+            loss_hint_ig_regularizer_rate=None,
+            loss_rbr_regularizer_rate=None,
+    ):
         """
         Fits the learner using training data from dataloader for specified number 
         of epochs. After every epoch the learner is evaluated on the specified
@@ -97,6 +68,25 @@ class Learner:
             save_best: saves the best model on the train loss to file.
             save_last: saves the model after every epoch .
         """
+
+        run_id = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")  # str(uuid.uuid1())
+
+        log_writer = open(f"logs/{self.modelname}_{run_id}.log", "w+")
+        log_writer.write(
+            "epoch,acc,loss,ra_loss,rr_loss,val_acc,val_loss,time\n")
+
+        tensorboard_writer = SummaryWriter(
+            log_dir=f"runs/{self.modelname}_{run_id}", comment=f"{self.modelname}_{run_id}")
+
+
+        # initialize loss-functions
+        # todo: since they are stateless consider refactoring them into single function
+        loss_function_rrr = RRRLoss(regularizer_rate=loss_rrr_regularizer_rate) if loss_rrr_regularizer_rate else None
+        loss_function_rrr_gc = RRRGradCamLoss(regularizer_rate=loss_rrr_gc_regularizer_rate) if loss_rrr_gc_regularizer_rate else None
+        loss_function_cdep = CDEPLoss(regularizer_rate=loss_cdep_regularizer_rate) if loss_cdep_regularizer_rate else None
+        loss_function_hint = HINTLoss(regularizer_rate=loss_hint_regularizer_rate) if loss_hint_regularizer_rate else None
+        loss_function_hint_ig = HINTLoss_IG(regularizer_rate=loss_hint_ig_regularizer_rate) if loss_hint_ig_regularizer_rate else None
+        loss_function_rbr = RBRLoss(regularizer_rate=loss_rbr_regularizer_rate) if loss_rbr_regularizer_rate else None
 
         print("Start training...")
         rtpt.start()
@@ -164,43 +154,43 @@ class Learner:
                     # MultiLoss START #
                     ###################
 
-                    if self.loss_function_rrr:
-                        batch_loss_rrr = self.loss_function_rrr.forward(
+                    if loss_function_rrr:
+                        batch_loss_rrr = loss_function_rrr.forward(
                             X, E_rwrd, y_hat)  # todo check implementation changes!
                         # print(f"loss_rrr={loss_rrr}")
                         batch_loss_right_reason += batch_loss_rrr
                         epoch_loss_rrr += batch_loss_rrr
 
-                    if self.loss_function_rrr_gc:
-                        batch_loss_rrr_gc = self.loss_function_rrr_gc.forward(
+                    if loss_function_rrr_gc:
+                        batch_loss_rrr_gc = loss_function_rrr_gc.forward(
                             self.model, X, y, E_rwrd, y_hat, self.device)  # changes verified
                         # print(f"loss_rrr_gc={loss_rrr_gc}")
                         batch_loss_right_reason += batch_loss_rrr_gc
                         epoch_loss_rrr_gc += batch_loss_rrr_gc
 
-                    if self.loss_function_cdep:
-                        batch_loss_cdep = self.loss_function_cdep.forward(
+                    if loss_function_cdep:
+                        batch_loss_cdep = loss_function_cdep.forward(
                             self.model, X, y, E_rwrd, self.device)  # changes verified
                         # print(f"loss_cdep={loss_cdep}")
                         batch_loss_right_reason += batch_loss_cdep
                         epoch_loss_cdep += batch_loss_cdep
 
-                    if self.loss_function_hint:
-                        batch_loss_hint = self.loss_function_hint.forward(
+                    if loss_function_hint:
+                        batch_loss_hint = loss_function_hint.forward(
                             self.model, X, y, E_rwrd, self.device)  # todo check implementation changes!
                         # print(f"loss_hint={loss_hint}")
                         batch_loss_right_reason += batch_loss_hint
                         epoch_loss_hint += batch_loss_hint
 
-                    if self.loss_function_hint_ig:
-                        batch_loss_hint_ig = self.loss_function_hint_ig.forward(
+                    if loss_function_hint_ig:
+                        batch_loss_hint_ig = loss_function_hint_ig.forward(
                             self.model, X, E_rwrd, y_hat, self.device)  # todo check implementation changes!
-                        #print(f"loss_hint={batch_loss_hint_ig}")
+                        # print(f"loss_hint={batch_loss_hint_ig}")
                         batch_loss_right_reason += batch_loss_hint_ig
                         epoch_loss_hint_ig += batch_loss_hint_ig
 
-                    if self.loss_function_rbr:
-                        batch_loss_rbr = self.loss_function_rbr.forward(
+                    if loss_function_rbr:
+                        batch_loss_rbr = loss_function_rbr.forward(
                             self.model, X, y, batch_loss_right_answer, E_rwrd, y_hat)  # changes verified
                         # print(f"loss_rbr={loss_rbr}")
                         batch_loss_right_reason += batch_loss_rbr
@@ -218,8 +208,6 @@ class Learner:
                     batch_loss_right_reason).backward()
                 self.optimizer.step()
 
-            
-
             # print(f"losses after epoch: right_answer={epoch_loss_right_answer}, hint={epoch_loss_hint}, rrr={epoch_loss_rrr}, rrr_gc={epoch_loss_rrr_gc}, cdep={epoch_loss_cdep}, rbr={epoch_loss_rbr}")
 
             epoch_loss_right_answer /= len_dataset
@@ -232,46 +220,46 @@ class Learner:
             elapsed_time_cur = time.time() - epoch_start_time
             elapsed_time += elapsed_time_cur
 
-            self.tensorboard_writer.add_scalar('Loss/train', epoch_loss, epoch)
+            tensorboard_writer.add_scalar('Loss/train', epoch_loss, epoch)
 
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar(
                 'Loss/ra', epoch_loss_right_answer, epoch)
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar(
                 'Loss/rr', epoch_loss_right_reason, epoch)
 
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar(
                 'Loss/rrr', epoch_loss_rrr, epoch)
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar(
                 'Loss/rrr_gc', epoch_loss_rrr_gc, epoch)
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar(
                 'Loss/cdep', epoch_loss_cdep, epoch)
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar(
                 'Loss/hint', epoch_loss_hint, epoch)
-            # self.tensorboard_writer.add_scalar(
-            #     'Loss/hint_ig', epoch_loss_hint_ig, epoch)
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar(
+                'Loss/hint_ig', epoch_loss_hint_ig, epoch)
+            tensorboard_writer.add_scalar(
                 'Loss/rbr', epoch_loss_rbr, epoch)
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar(
                 'Loss/ce', epoch_loss_right_answer_ce, epoch)
 
-            self.tensorboard_writer.add_scalar('Acc/train', train_acc, epoch)
-            self.tensorboard_writer.add_scalar(
+            tensorboard_writer.add_scalar('Acc/train', train_acc, epoch)
+            tensorboard_writer.add_scalar(
                 'Time/train', elapsed_time_cur, epoch)
 
             val_acc, val_loss = self.score(
                 test_loader, self.base_criterion)
 
-            self.tensorboard_writer.add_scalar('Loss/test', val_loss, epoch)
-            self.tensorboard_writer.add_scalar('Acc/test', val_acc, epoch)
-            self.tensorboard_writer.flush()
+            tensorboard_writer.add_scalar('Loss/test', val_loss, epoch)
+            tensorboard_writer.add_scalar('Acc/test', val_acc, epoch)
+            tensorboard_writer.flush()
 
             logging.debug(
                 f"Epoch {epoch}| accuracy: {(train_acc):>0.1f}%, loss: {epoch_loss:>8f} | Test Error: Acc: {val_acc:>0.1f}%, Avg loss: {val_loss:>8f}")
 
             # write in logfile -> we need the logfile to see plots in Jupyter notebooks
-            self.log_writer.write(
+            log_writer.write(
                 f"{epoch},{(train_acc):>0.1f},{epoch_loss:>8f},{epoch_loss_right_answer:>8f},{epoch_loss_right_reason:>8f},{(val_acc):>0.1f},{val_loss:>8f},{elapsed_time_cur:>0.4f}\n")
-            self.log_writer.flush()
+            log_writer.flush()
 
             # # log to terminal on switch
             # if epoch == disable_xil_loss_first_n_epochs and verbose and disable_xil_loss_first_n_epochs != 0:
@@ -280,17 +268,19 @@ class Learner:
             # save the current best model on val set
             if save_best_epoch and epoch_loss < best_epoch_loss:
                 best_epoch_loss = epoch_loss
-                self.save_learner(verbose=False, best=True)
+                self.save_learner(epochs=epoch, best=True)
 
             if save_last:
-                self.save_learner(verbose=False)
-
+                self.save_learner(epochs=epoch)
+            
             rtpt.step()
+
+        log_writer.close()
+        tensorboard_writer.close()
 
         print(f"--> Training took {elapsed_time:>4f} seconds!")
 
     def load(self, name):
-        # TODO: adapt to class implementation; may have introduced breaking changes
         """Load the model with name from the model_store."""
         checkpoint = torch.load(
             'learner/model_store/' + name, map_location=torch.device(self.device))
@@ -302,41 +292,24 @@ class Learner:
             torch.set_rng_state(checkpoint['rng_state'].type(torch.ByteTensor))
         if 'epochs' in checkpoint:
             epochs_ = checkpoint['epochs']
-        print(
-            f"Model {self.modelname} loaded! Was trained on {checkpoint['loss']} for {epochs_} epochs!")
 
-    def save_learner(self, epochs=0, verbose=1, best=False):
+        logging.info(
+            f"Model {self.modelname} loaded! Was trained for {epochs_} epochs!")
+
+    def save_learner(self, epochs=0, best=False):
         pass
         """Save the model dict to disk."""
-        # # TODO: adapt to class implementation; may have introduced breaking changes
-        # if best:
-        #    self.modelname = self.modelname + "-bestOnTrain"
+
         results = {
             'weights': self.model.state_dict(),
             'optimizer_dict': self.optimizer.state_dict(),
-            'modelname': self.modelname,
+            'modelname':  self.modelname + "-bestOnTrain" if best else self.modelname,
             'epochs': epochs,
             'rng_state': torch.get_rng_state()
         }
 
-        if self.loss_function_rrr:
-            results['loss_rrr'] = str(self.loss_function_rrr)
-
-        if self.loss_function_rrr_gc:
-            results['loss_rrr_gc'] = str(self.loss_function_rrr_gc)
-
-        if self.loss_function_cdep:
-            results['loss_cdep'] = str(self.loss_function_cdep)
-
-        if self.loss_function_hint:
-            results['loss_hint'] = str(self.loss_function_hint)
-
-        if self.loss_function_rbr:
-            results['loss_rbr'] = str(self.loss_function_rbr)
-
         torch.save(results, 'learner/model_store/' + self.modelname + '.pt')
-        if verbose == 1:
-            print("Model saved!")
+        logging.info("Model saved!")
 
     def score(self, dataloader, criterion, verbose=False):
         """Returns the acc and loss on the specified dataloader."""
@@ -359,6 +332,3 @@ class Learner:
                 f"Test Error: Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
         return 100*correct, test_loss
 
-    # def __del__(self):
-    #     self.log_writer.close()
-    #     self.tensorboard_writer.close()

@@ -19,6 +19,7 @@ parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('-sb', '--save-best-epoch', action='store_true')
 parser.add_argument('-t', '--num-threads', type=int, default=5)
 parser.add_argument('-nce', '--no-counterexamples', action='store_true')
+parser.add_argument('-l', '--load-model', action='store_true') # load previously trained model
 
 parser.add_argument('--rrr-rr', type=int)
 parser.add_argument('--rrr-gc-rr', type=int)
@@ -68,30 +69,35 @@ learner = Learner(
     optimizer,
     DEVICE,
     MODELNAME,
-    loss_rrr_regularizer_rate=args.rrr_rr,
-    loss_rrr_gc_regularizer_rate=args.rrr_gc_rr,
-    loss_cdep_regularizer_rate=args.cdep_rr,
-    loss_hint_regularizer_rate=args.hint_rr,
-    loss_hint_ig_regularizer_rate=args.hint_ig_rr,
-    loss_rbr_regularizer_rate=args.rbr_rr,
+    load=args.load_model
 )
 
-learner.fit(
-    train_loader,
-    test_loader,
-    args.epochs,
-    rtpt,
-    save_best_epoch=args.save_best_epoch
-)
+if not args.load_model:
+    learner.fit(
+        train_loader,
+        test_loader,
+        args.epochs,
+        rtpt,
+        save_best_epoch=args.save_best_epoch,
 
+        loss_rrr_regularizer_rate=args.rrr_rr,
+        loss_rrr_gc_regularizer_rate=args.rrr_gc_rr,
+        loss_cdep_regularizer_rate=args.cdep_rr,
+        loss_hint_regularizer_rate=args.hint_rr,
+        loss_hint_ig_regularizer_rate=args.hint_ig_rr,
+        loss_rbr_regularizer_rate=args.rbr_rr,
+    )
+else:
+    logging.info('Model was loaded from file, skipping training')
 
 
 dataset = 'fmnist' if args.fmnist else 'mnist'
+mode = f'rrr={args.rrr_rr},rrr-gc={args.rrr_gc_rr},cdep={args.cdep_rr},hint={args.hint_rr},hint-ig={args.hint_ig_rr},rbr={args.rbr_rr}'
 
-os.makedirs(f'output_images/{dataset}-expl/{args.mode}_saliency/', exist_ok=True)
+os.makedirs(f'output_images/{dataset}-expl/{mode}_saliency/', exist_ok=True)
 explainer.explain_with_captum('saliency', learner.model, test_loader, range(len(test_loader)), \
                               next_to_each_other=False,)
-                              #save_name=f'{dataset}-expl/{args.mode}_saliency/{dataset}-{args.mode}-test-wp-grad')
+                            #   save_name=f'{dataset}-expl/{mode}_saliency/{dataset}-{mode}-test-wp-grad')
 # thresh = explainer.quantify_wrong_reason('saliency', test_dataloader, learner.model, mode='mean',
 #                                             name=f'{args.mode}-saliency', wr_name=MODELNAME + "--saliency", \
 #                                             threshold=None, flags=False, device=DEVICE)
