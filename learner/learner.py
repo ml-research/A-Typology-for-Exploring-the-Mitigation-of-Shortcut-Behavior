@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from sklearn.metrics import confusion_matrix, classification_report
 from tqdm import tqdm
 from rtpt import RTPT
 from xil_methods.xil_loss import RRRGradCamLoss, RRRLoss, CDEPLoss, HINTLoss, HINTLoss_IG, RBRLoss
