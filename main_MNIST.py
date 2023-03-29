@@ -32,7 +32,7 @@ args = parser.parse_args()
 
 logging.info(f'cli args: {args}')
 
-MODELNAME = f'MultiLoss(F)MNIST rrr={args.rrr_rr},rrr-gc={args.rrr_gc_rr},cdep={args.cdep_rr},hint={args.hint_rr},hint-ig={args.hint_ig_rr},rbr={args.rbr_rr}'
+MODELNAME = f'MultiLoss(F)MNIST,rrr={args.rrr_rr},rrr-gc={args.rrr_gc_rr},cdep={args.cdep_rr},hint={args.hint_rr},hint-ig={args.hint_ig_rr},rbr={args.rbr_rr}'
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f"Compute DEVICE={DEVICE}")
