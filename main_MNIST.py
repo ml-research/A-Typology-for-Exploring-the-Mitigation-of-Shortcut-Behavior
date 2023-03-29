@@ -32,7 +32,8 @@ args = parser.parse_args()
 
 logging.info(f'cli args: {args}')
 
-MODELNAME = 'MultiLoss(F)MNIST'
+MODELNAME = f'MultiLoss(F)MNIST rrr={args.rrr_rr},rrr-gc={args.rrr_gc_rr},cdep={args.cdep_rr},hint={args.hint_rr},hint-ig={args.hint_ig_rr},rbr={args.rbr_rr}'
+
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f"Compute DEVICE={DEVICE}")
 
@@ -94,13 +95,15 @@ else:
 dataset = 'fmnist' if args.fmnist else 'mnist'
 mode = f'rrr={args.rrr_rr},rrr-gc={args.rrr_gc_rr},cdep={args.cdep_rr},hint={args.hint_rr},hint-ig={args.hint_ig_rr},rbr={args.rbr_rr}'
 
+avg4 = []
+
 os.makedirs(f'output_images/{dataset}-expl/{mode}_saliency/', exist_ok=True)
 explainer.explain_with_captum('saliency', learner.model, test_loader, range(len(test_loader)), \
                               next_to_each_other=False,)
                             #   save_name=f'{dataset}-expl/{mode}_saliency/{dataset}-{mode}-test-wp-grad')
-# thresh = explainer.quantify_wrong_reason('saliency', test_dataloader, learner.model, mode='mean',
-#                                             name=f'{args.mode}-saliency', wr_name=MODELNAME + "--saliency", \
-#                                             threshold=None, flags=False, device=DEVICE)
-# avg4.append(explainer.quantify_wrong_reason('saliency', test_dataloader, learner.model, mode='mean',
-#                                             name=f'{args.mode}-saliency', wr_name=MODELNAME + "--saliency", \
-#                                             threshold=thresh, flags=False, device=DEVICE))
+thresh = explainer.quantify_wrong_reason('saliency', test_loader, learner.model, mode='mean',
+                                            name=f'{args.mode}-saliency', wr_name=MODELNAME + "--saliency", \
+                                            threshold=None, flags=False, device=DEVICE)
+avg4.append(explainer.quantify_wrong_reason('saliency', test_loader, learner.model, mode='mean',
+                                            name=f'{args.mode}-saliency', wr_name=MODELNAME + "--saliency", \
+                                            threshold=thresh, flags=False, device=DEVICE))
