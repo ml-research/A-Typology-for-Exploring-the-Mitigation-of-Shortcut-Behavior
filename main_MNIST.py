@@ -102,14 +102,14 @@ else:
 dataset = 'fmnist' if args.fmnist else 'mnist'
 
 # +
-avg1 = []
-avg2 = []
-avg3 = []
-avg4 = []
-avg5 = []
-avg6 = []
-avg7 = []
-avg8 = []
+avg_gradcam = []
+avg_ig = []
+avg_lime = []
+avg_saliency = []
+avg_ixg = []
+avg_deeplift = []
+avg_lrp = []
+avg_gbp = []
 avg9 = []
 
 test_dataloader = test_loader
@@ -125,7 +125,7 @@ for i in range(5):
         thresh = explainer.quantify_wrong_reason('grad_cam', test_dataloader, learner.model, mode='mean',
                                                  name=f'{mode}-grad', wr_name=MODELNAME + "--grad", \
                                                  threshold=None, flags=False, device=DEVICE)
-        avg1.append(explainer.quantify_wrong_reason('grad_cam', test_dataloader, learner.model, mode='mean',
+        avg_gradcam.append(explainer.quantify_wrong_reason('grad_cam', test_dataloader, learner.model, mode='mean',
                                                     name=f'{mode}-grad', wr_name=MODELNAME + "--grad", \
                                                     threshold=thresh, flags=False, device=DEVICE))
 
@@ -137,7 +137,7 @@ for i in range(5):
         thresh = explainer.quantify_wrong_reason('saliency', test_dataloader, learner.model, mode='mean',
                                                  name=f'{mode}-saliency', wr_name=MODELNAME + "--saliency", \
                                                  threshold=None, flags=False, device=DEVICE)
-        avg4.append(explainer.quantify_wrong_reason('saliency', test_dataloader, learner.model, mode='mean',
+        avg_saliency.append(explainer.quantify_wrong_reason('saliency', test_dataloader, learner.model, mode='mean',
                                                     name=f'{mode}-saliency', wr_name=MODELNAME + "--saliency", \
                                                     threshold=thresh, flags=False, device=DEVICE))
 
@@ -150,7 +150,7 @@ for i in range(5):
                                                  name=f'{mode}-input_x_gradient',
                                                  wr_name=MODELNAME + "--input_x_gradient", \
                                                  threshold=None, flags=False, device=DEVICE)
-        avg5.append(explainer.quantify_wrong_reason('input_x_gradient', test_dataloader, learner.model, mode='mean',
+        avg_ixg.append(explainer.quantify_wrong_reason('input_x_gradient', test_dataloader, learner.model, mode='mean',
                                                     name=f'{mode}-input_x_gradient',
                                                     wr_name=MODELNAME + "--input_x_gradient", \
                                                     threshold=thresh, flags=False, device=DEVICE))
@@ -163,7 +163,7 @@ for i in range(5):
         thresh = explainer.quantify_wrong_reason('deep_lift', test_dataloader, learner.model, mode='mean',
                                                  name=f'{mode}-deep_lift', wr_name=MODELNAME + "--deep_lift", \
                                                  threshold=None, flags=False, device=DEVICE)
-        avg6.append(explainer.quantify_wrong_reason('deep_lift', test_dataloader, learner.model, mode='mean',
+        avg_deeplift.append(explainer.quantify_wrong_reason('deep_lift', test_dataloader, learner.model, mode='mean',
                                                     name=f'{mode}-deep_lift', wr_name=MODELNAME + "--deep_lift", \
                                                     threshold=thresh, flags=False, device=DEVICE))
 
@@ -175,7 +175,7 @@ for i in range(5):
         thresh = explainer.quantify_wrong_reason('lrp', test_dataloader, learner.model, mode='mean',
                                                  name=f'{mode}-lrp', wr_name=MODELNAME + "--lrp", \
                                                  threshold=None, flags=False, device=DEVICE)
-        avg7.append(explainer.quantify_wrong_reason('lrp', test_dataloader, learner.model, mode='mean',
+        avg_lrp.append(explainer.quantify_wrong_reason('lrp', test_dataloader, learner.model, mode='mean',
                                                     name=f'{mode}-lrp', wr_name=MODELNAME + "--lrp", \
                                                     threshold=thresh, flags=False, device=DEVICE))
 
@@ -188,24 +188,25 @@ for i in range(5):
                                                  name=f'{mode}-guided_backprop',
                                                  wr_name=MODELNAME + "--guided_backprop", \
                                                  threshold=None, flags=False, device=DEVICE)
-        avg8.append(explainer.quantify_wrong_reason('guided_backprop', test_dataloader, learner.model, mode='mean',
+        avg_gbp.append(explainer.quantify_wrong_reason('guided_backprop', test_dataloader, learner.model, mode='mean',
                                                     name=f'{mode}-guided_backprop',
                                                     wr_name=MODELNAME + "--guided_backprop", \
                                                     threshold=thresh, flags=False, device=DEVICE))
 
-    if 'IntGrad' in args.method:
-        os.makedirs(f'output_images/{dataset}-expl/{mode}_integrated_gradient/', exist_ok=True)
-        explainer.explain_with_captum('integrated_gradient', learner.model, test_dataloader, range(len(test_dataloader)), \
-                                      next_to_each_other=False,
-                                      save_name=f'{dataset}-expl/{mode}_integrated_gradient/{dataset}-{mode}-test-wp-grad')
-        thresh = explainer.quantify_wrong_reason('integrated_gradient', test_dataloader, learner.model, mode='mean',
-                                                 name=f'{mode}-integrated_gradient',
-                                                 wr_name=MODELNAME + "--integrated_gradient", \
-                                                 threshold=None, flags=False, device=DEVICE)
-        avg9.append(explainer.quantify_wrong_reason('integrated_gradient', test_dataloader, learner.model, mode='mean',
-                                                    name=f'{mode}-integrated_gradient',
-                                                    wr_name=MODELNAME + "--integrated_gradient", \
-                                                    threshold=thresh, flags=False, device=DEVICE))
+    # not implemented
+    # if 'IntGrad' in args.method:
+    #     os.makedirs(f'output_images/{dataset}-expl/{mode}_integrated_gradient/', exist_ok=True)
+    #     explainer.explain_with_captum('integrated_gradient', learner.model, test_dataloader, range(len(test_dataloader)), \
+    #                                   next_to_each_other=False,
+    #                                   save_name=f'{dataset}-expl/{mode}_integrated_gradient/{dataset}-{mode}-test-wp-grad')
+    #     thresh = explainer.quantify_wrong_reason('integrated_gradient', test_dataloader, learner.model, mode='mean',
+    #                                              name=f'{mode}-integrated_gradient',
+    #                                              wr_name=MODELNAME + "--integrated_gradient", \
+    #                                              threshold=None, flags=False, device=DEVICE)
+    #     avg9.append(explainer.quantify_wrong_reason('integrated_gradient', test_dataloader, learner.model, mode='mean',
+    #                                                 name=f'{mode}-integrated_gradient',
+    #                                                 wr_name=MODELNAME + "--integrated_gradient", \
+    #                                                 threshold=thresh, flags=False, device=DEVICE))
 
     if 'IG' in args.method:
         os.makedirs(f'output_images/{dataset}-expl/{mode}_ig/', exist_ok=True)
@@ -215,7 +216,7 @@ for i in range(5):
         thresh = explainer.quantify_wrong_reason('ig_ross', test_dataloader, learner.model, mode='mean',
                                                  name=f'{mode}-ig', wr_name=MODELNAME + "--ig", \
                                                  threshold=None, flags=False, device=DEVICE)
-        avg2.append(explainer.quantify_wrong_reason('ig_ross', test_dataloader, learner.model, mode='mean',
+        avg_ig.append(explainer.quantify_wrong_reason('ig_ross', test_dataloader, learner.model, mode='mean',
                                                     name=f'{mode}-ig', wr_name=MODELNAME + "--ig", \
                                                     threshold=thresh, flags=False, device=DEVICE))
 
@@ -230,19 +231,19 @@ for i in range(5):
                                                       threshold=None, save_raw_attr=True, num_samples=1000, flags=False,
                                                       gray_images=True)
         print("done thresh")
-        avg3.append(explainer.quantify_wrong_reason_lime_preload(learner.model, mode='mean', name=f'{mode}-lime', \
+        avg_lime.append(explainer.quantify_wrong_reason_lime_preload(learner.model, mode='mean', name=f'{mode}-lime', \
                                                                  threshold=thresh, device=DEVICE,
                                                                  batch_size=BATCH_SIZE))
         print("done append")
 
     f = open(f"./output_wr_metric/{dataset}-{mode}.txt", "w")
-    f.write(f'Grad P: mean:{np.mean(avg1)}, std:{np.std(avg1)}\n'
-            f'IG P: mean:{np.mean(avg2)}, std:{np.std(avg2)}\n'
-            f'LIME P: mean:{np.mean(avg3)}, std:{np.std(avg3)}\n'
-            f'Saliency P: mean:{np.mean(avg4)}, std:{np.std(avg4)}\n'
-            f'IxG P: mean:{np.mean(avg5)}, std:{np.std(avg5)}\n'
-            f'DL P: mean:{np.mean(avg6)}, std:{np.std(avg6)}\n'
-            f'LRP P: mean:{np.mean(avg7)}, std:{np.std(avg7)}\n'
-            f'GBP P: mean:{np.mean(avg8)}, std:{np.std(avg8)}\n'
+    f.write(f'Grad P: mean:{np.mean(avg_gradcam)}, std:{np.std(avg_gradcam)}\n'
+            f'IG P: mean:{np.mean(avg_ig)}, std:{np.std(avg_ig)}\n'
+            f'LIME P: mean:{np.mean(avg_lime)}, std:{np.std(avg_lime)}\n'
+            f'Saliency P: mean:{np.mean(avg_saliency)}, std:{np.std(avg_saliency)}\n'
+            f'IxG P: mean:{np.mean(avg_ixg)}, std:{np.std(avg_ixg)}\n'
+            f'DL P: mean:{np.mean(avg_deeplift)}, std:{np.std(avg_deeplift)}\n'
+            f'LRP P: mean:{np.mean(avg_lrp)}, std:{np.std(avg_lrp)}\n'
+            f'GBP P: mean:{np.mean(avg_gbp)}, std:{np.std(avg_gbp)}\n'
             f'IntGrad P: mean:{np.mean(avg9)}, std:{np.std(avg9)}\n')
     f.close()
