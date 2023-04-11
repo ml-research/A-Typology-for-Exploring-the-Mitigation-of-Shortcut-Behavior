@@ -7,14 +7,13 @@ import torch
 import torch.nn.functional as F
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
-from rtpt import RTPT
 from xil_methods.xil_loss import RRRGradCamLoss, RRRLoss, CDEPLoss, HINTLoss, HINTLoss_IG, RBRLoss
 from datetime import datetime
 
 
 class Learner:
     """
-    Learner that combines multiple 
+    Learner that can be configured to train on multiple weighted loss-functions simultaneously
     """
 
     def __init__(
@@ -23,27 +22,48 @@ class Learner:
         optimizer,
         device: str,
         modelname: str,
-        base_criterion=F.cross_entropy,
-
-        load=False
+        loss_function_right_answer=F.cross_entropy,
     ):
 
-        self.model = model  # covered by save()
-        self.optimizer = optimizer  # covered by save()
+        self.model = model
+        self.optimizer = optimizer
         self.device = device
-        self.modelname = modelname  # covered by save()
+        self.modelname = modelname
+        self.loss_function_right_answer = loss_function_right_answer
 
-        self.base_criterion = base_criterion
+        self.n_trained_epochs = 0
 
-        if load:
-            self.load(modelname+'.pt')
+        # model automatically tries to load checkpoint from previous run
+        self.load_from_checkpoint()
+
+
+    def score(self, dataloader, criterion, verbose=False):
+        """Returns the acc and loss on the specified dataloader."""
+        size = len(dataloader.dataset)
+        self.model.eval()
+        test_loss, correct = 0, 0
+        with torch.no_grad():
+            for data in dataloader:
+                X, y = data[0].to(self.device), data[1].to(self.device)
+                logits = self.model(X)
+                output = F.softmax(logits, dim=1)
+                test_loss += criterion(output, y).item()
+                correct += (output.argmax(1) ==
+                            y).type(torch.float).sum().item()
+
+        test_loss /= size
+        correct /= size
+        if verbose:
+            print(
+                f"Test Error: Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
+        return 100*correct, test_loss
+
 
     def fit(
             self,
             train_loader,
             test_loader,
             epochs,
-            rtpt,
             save_best_epoch=False,
             save_last=True,
             loss_rrr_regularizer_rate=None,
@@ -88,12 +108,11 @@ class Learner:
         loss_function_rbr = RBRLoss(regularizer_rate=loss_rbr_regularizer_rate) if loss_rbr_regularizer_rate else None
 
         print("Start training...")
-        rtpt.start()
 
         best_epoch_loss = 100000
         elapsed_time = 0
 
-        for epoch in range(1, epochs+1):
+        for epoch in range(self.n_trained_epochs+1, epochs+1):
             self.model.train()
             len_dataset = len(train_loader.dataset)
 
@@ -132,7 +151,7 @@ class Learner:
                     y_hat_ce = self.model(X_ce)
                     epoch_correct += (y_hat_ce.argmax(1) ==
                                       y_ce).type(torch.float).sum().item()
-                    batch_loss_right_answer_ce += self.base_criterion(
+                    batch_loss_right_answer_ce += self.loss_function_right_answer(
                         y_hat_ce, y_ce)
                     epoch_loss_right_answer_ce += batch_loss_right_answer_ce
                     logging.debug(
@@ -144,7 +163,7 @@ class Learner:
                     y_hat = self.model(X)
                     epoch_correct += (y_hat.argmax(1) ==
                                       y).type(torch.float).sum().item()
-                    batch_loss_right_answer = self.base_criterion(y_hat, y)
+                    batch_loss_right_answer = self.loss_function_right_answer(y_hat, y)
                     epoch_loss_right_answer += batch_loss_right_answer
                     logging.debug(
                         f"loss_right_answer={batch_loss_right_answer}")
@@ -246,7 +265,7 @@ class Learner:
                 'Time/train', elapsed_time_cur, epoch)
 
             val_acc, val_loss = self.score(
-                test_loader, self.base_criterion)
+                test_loader, self.loss_function_right_answer)
 
             tensorboard_writer.add_scalar('Loss/test', val_loss, epoch)
             tensorboard_writer.add_scalar('Acc/test', val_acc, epoch)
@@ -267,67 +286,54 @@ class Learner:
             # save the current best model on val set
             if save_best_epoch and epoch_loss < best_epoch_loss:
                 best_epoch_loss = epoch_loss
-                self.save_learner(epochs=epoch, best=True)
+                self.save_to_checkpoint(n_trained_epochs=epoch, best=True)
 
             if save_last:
-                self.save_learner(epochs=epoch)
+                self.save_to_checkpoint(n_trained_epochs=epoch)
             
-            rtpt.step()
 
         log_writer.close()
         tensorboard_writer.close()
 
         print(f"--> Training took {elapsed_time:>4f} seconds!")
 
-    def load(self, name):
-        """Load the model with name from the model_store."""
-        checkpoint = torch.load(
-            'learner/model_store/' + name, map_location=torch.device(self.device))
-        self.model.load_state_dict(checkpoint['weights'])
-        epochs_ = "none"
-        if 'optimizer_dict' in checkpoint:
-            self.optimizer.load_state_dict(checkpoint['optimizer_dict'])
-        if 'rng_state' in checkpoint:
-            torch.set_rng_state(checkpoint['rng_state'].type(torch.ByteTensor))
-        if 'epochs' in checkpoint:
-            epochs_ = checkpoint['epochs']
 
-        logging.info(
-            f"Model {self.modelname} loaded! Was trained for {epochs_} epochs!")
+    def save_to_checkpoint(self, n_trained_epochs, best=False):
+        """
+        Save the model dict to disk.
+        """
 
-    def save_learner(self, epochs=0, best=False):
-        pass
-        """Save the model dict to disk."""
-
-        results = {
+        checkpoint = {
             'weights': self.model.state_dict(),
             'optimizer_dict': self.optimizer.state_dict(),
             'modelname':  self.modelname + "-bestOnTrain" if best else self.modelname,
-            'epochs': epochs,
+            'n_trained_epochs': n_trained_epochs,
             'rng_state': torch.get_rng_state()
         }
 
-        torch.save(results, 'learner/model_store/' + self.modelname + '.pt')
-        logging.info("Model saved!")
+        path = f'learner/model_store/{self.modelname}.pt'
+        torch.save(checkpoint, path)
+        logging.info(f'model saved to "{path}"')
 
-    def score(self, dataloader, criterion, verbose=False):
-        """Returns the acc and loss on the specified dataloader."""
-        size = len(dataloader.dataset)
-        self.model.eval()
-        test_loss, correct = 0, 0
-        with torch.no_grad():
-            for data in dataloader:
-                X, y = data[0].to(self.device), data[1].to(self.device)
-                logits = self.model(X)
-                output = F.softmax(logits, dim=1)
-                test_loss += criterion(output, y).item()
-                correct += (output.argmax(1) ==
-                            y).type(torch.float).sum().item()
 
-        test_loss /= size
-        correct /= size
-        if verbose:
-            print(
-                f"Test Error: Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
-        return 100*correct, test_loss
+    def load_from_checkpoint(self):
+        """
+        Try to load the model with name from the model_store.
+        """
+        path = f'learner/model_store/{self.modelname}.pt'
+
+        try:
+            checkpoint = torch.load(path, map_location=torch.device(self.device))
+            
+            self.model.load_state_dict(checkpoint['weights'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_dict'])
+            torch.set_rng_state(checkpoint['rng_state'].type(torch.ByteTensor))
+            self.n_trained_epochs = checkpoint['n_trained_epochs']
+
+            print(f'Loaded {path}. Was trained for {self.n_trained_epochs} epochs')
+            
+        except FileNotFoundError:
+            logging.info(f'No checkpoint found for "{path}" -> continue with normal training')
+
+
 

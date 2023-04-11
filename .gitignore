@@ -16,3 +16,4 @@ logs/
 runs/
 venv/
 .vscode/
+copy_model_store_from_dgx.sh
