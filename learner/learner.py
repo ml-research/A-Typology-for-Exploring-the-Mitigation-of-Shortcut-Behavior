@@ -226,7 +226,7 @@ class Learner:
                     batch_loss_right_reason).backward()
                 self.optimizer.step()
 
-            # print(f"losses after epoch: right_answer={epoch_loss_right_answer}, hint={epoch_loss_hint}, rrr={epoch_loss_rrr}, rrr_gc={epoch_loss_rrr_gc}, cdep={epoch_loss_cdep}, rbr={epoch_loss_rbr}")
+            print(f"epoch losses: right_answer={epoch_loss_right_answer}, hint={epoch_loss_hint}, hint_ig={epoch_loss_hint_ig}, rrr={epoch_loss_rrr}, rrr_gc={epoch_loss_rrr_gc}, cdep={epoch_loss_cdep}, rbr={epoch_loss_rbr}")
 
             epoch_loss_right_answer /= len_dataset
             epoch_loss_right_reason /= len_dataset
@@ -334,6 +334,4 @@ class Learner:
             
         except FileNotFoundError:
             logging.info(f'No checkpoint found for "{path}" -> continue with normal training')
-
-
 
