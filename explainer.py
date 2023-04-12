@@ -738,7 +738,7 @@ def quantify_wrong_reason(method, dataloader, model, device, name, wr_name,\
                 lrp = LRP(model)
                 attr = lrp.attribute(images_t, target=predicted)
 
-            elif method == 'integrated_gradient':
+            elif method == 'integrated_gradients':
                 intgrad = IntegratedGradients(model)
                 attr = intgrad.attribute(images_t, target=predicted)
 

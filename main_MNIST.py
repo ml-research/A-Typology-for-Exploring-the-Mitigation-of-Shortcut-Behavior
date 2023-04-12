@@ -233,20 +233,20 @@ for i, learner in enumerate(trained_learners):
                                                     wr_name=learner.modelname + "--guided_backprop", \
                                                     threshold=thresh, flags=False, device=DEVICE))
 
-    # not implemented
-    # if 'IntGrad' in args.explainer_config:
-    #     os.makedirs(f'output_images/{args.dataset}-expl/{mode}_integrated_gradient/', exist_ok=True)
-    #     explainer.explain_with_captum('integrated_gradient', learner.model, test_loader, range(len(test_loader)), \
-    #                                   next_to_each_other=False,
-    #                                   save_name=f'{args.dataset}-expl/{mode}_integrated_gradient/{args.dataset}-{mode}-test-wp-grad')
-    #     thresh = explainer.quantify_wrong_reason('integrated_gradient', test_loader, learner.model, mode='mean',
-    #                                              name=f'{mode}-integrated_gradient',
-    #                                              wr_name=MODELNAME + "--integrated_gradient", \
-    #                                              threshold=None, flags=False, device=DEVICE)
-    #     avg9.append(explainer.quantify_wrong_reason('integrated_gradient', test_loader, learner.model, mode='mean',
-    #                                                 name=f'{mode}-integrated_gradient',
-    #                                                 wr_name=MODELNAME + "--integrated_gradient", \
-    #                                                 threshold=thresh, flags=False, device=DEVICE))
+    #not implemented
+    if 'IntGrad' in args.explainer_config:
+        os.makedirs(f'output_images/{args.dataset}-expl/{loss_config_string}_integrated_gradients/', exist_ok=True)
+        explainer.explain_with_captum('integrated_gradients', learner.model, test_loader, range(len(test_loader)), \
+                                      next_to_each_other=False,
+                                      save_name=f'{args.dataset}-expl/{loss_config_string}_integrated_gradients/{args.dataset}-{loss_config_string}-test-wp-grad')
+        thresh = explainer.quantify_wrong_reason('integrated_gradients', test_loader, learner.model, mode='mean',
+                                                 name=f'{loss_config_string}-integrated_gradients',
+                                                 wr_name=learner.modelname + "--integrated_gradients", \
+                                                 threshold=None, flags=False, device=DEVICE)
+        avg9.append(explainer.quantify_wrong_reason('integrated_gradients', test_loader, learner.model, mode='mean',
+                                                    name=f'{loss_config_string}-integrated_gradients',
+                                                    wr_name=learner.modelname + "--integrated_gradients", \
+                                                    threshold=thresh, flags=False, device=DEVICE))
 
     if 'IG' in args.explainer_config:
         os.makedirs(f'output_images/{args.dataset}-expl/{loss_config_string}_ig/', exist_ok=True)
@@ -268,16 +268,13 @@ for i, learner in enumerate(trained_learners):
                                     save_name=f'{args.dataset}-expl/{loss_config_string}_lime/{args.dataset}-{loss_config_string}-test-wp-lime')
         thresh = explainer.quantify_wrong_reason_lime(test_loader, learner.model, mode='mean',
                                                       name=f'{loss_config_string}-lime', \
-                                                      threshold=None, save_raw_attr=True, num_samples=1000, flags=False,
+                                                      threshold=None, save_raw_attr=True, num_samples=2000, flags=False,
                                                       gray_images=True)
         print("done thresh")
         avg_lime.append(explainer.quantify_wrong_reason_lime_preload(learner.model, mode='mean', name=f'{loss_config_string}-lime', \
                                                                  threshold=thresh, device=DEVICE,
                                                                  batch_size=args.batch_size))
         print("done append")
-
-
-
 
 
 
@@ -302,4 +299,5 @@ for i, learner in enumerate(trained_learners):
         f.write(f'GBP P: mean:{np.mean(avg_gbp)}, std:{np.std(avg_gbp)}\n')
     if 'IntGrad' in args.explainer_config:
         f.write(f'IntGrad P: mean:{np.mean(avg9)}, std:{np.std(avg9)}\n')
+
     f.close()
