@@ -17,7 +17,7 @@ parser.add_argument('--hint', type=int)
 parser.add_argument('--hintig', type=int)
 parser.add_argument('--rbr', type=int)
 
-parser.add_argument('-r', '--runs', default=range(1, 6), type=int, choices=range(1, 6), help='Which runs to perform (each run has a different seed)?')
+parser.add_argument('-r', '--runs', default=range(1, 6), type=int, choices=range(1, 6), nargs='+', help='Which runs to perform (each run has a different seed)?')
 
 parser.add_argument('--explainer-config', default='GradCAM IG LIME Saliency IxG DeepLift LRP GBP IntGrad', type=str,
                     choices=['GradCAM', 'IG', 'LIME', 'Saliency', \
@@ -285,21 +285,21 @@ for i, learner in enumerate(trained_learners):
     f = open(f"./output_wr_metric/{args.dataset}-{loss_config_string}.txt", "w")
     
     if 'GradCAM' in args.explainer_config:
-        f.write(f'Grad P: mean:{np.mean(avg_gradcam)}, std:{np.std(avg_gradcam)}')
+        f.write(f'Grad P: mean:{np.mean(avg_gradcam)}, std:{np.std(avg_gradcam)}\n')
     if 'IG' in args.explainer_config:
-        f.write(f'IG P: mean:{np.mean(avg_ig)}, std:{np.std(avg_ig)}')
+        f.write(f'IG P: mean:{np.mean(avg_ig)}, std:{np.std(avg_ig)}\n')
     if 'LIME' in args.explainer_config:
-        f.write(f'LIME P: mean:{np.mean(avg_lime)}, std:{np.std(avg_lime)}')
+        f.write(f'LIME P: mean:{np.mean(avg_lime)}, std:{np.std(avg_lime)}\n')
     if 'Saliency' in args.explainer_config:
-        f.write(f'Saliency P: mean:{np.mean(avg_saliency)}, std:{np.std(avg_saliency)}')
+        f.write(f'Saliency P: mean:{np.mean(avg_saliency)}, std:{np.std(avg_saliency)}\n')
     if 'IxG' in args.explainer_config:
-        f.write(f'IxG P: mean:{np.mean(avg_ixg)}, std:{np.std(avg_ixg)}')
+        f.write(f'IxG P: mean:{np.mean(avg_ixg)}, std:{np.std(avg_ixg)}\n')
     if 'DeepLift' in args.explainer_config:
-        f.write(f'DL P: mean:{np.mean(avg_deeplift)}, std:{np.std(avg_deeplift)}')
+        f.write(f'DL P: mean:{np.mean(avg_deeplift)}, std:{np.std(avg_deeplift)}\n')
     if 'LRP' in args.explainer_config:
-        f.write(f'LRP P: mean:{np.mean(avg_lrp)}, std:{np.std(avg_lrp)}')
+        f.write(f'LRP P: mean:{np.mean(avg_lrp)}, std:{np.std(avg_lrp)}\n')
     if 'GBP' in args.explainer_config:
-        f.write(f'GBP P: mean:{np.mean(avg_gbp)}, std:{np.std(avg_gbp)}')
+        f.write(f'GBP P: mean:{np.mean(avg_gbp)}, std:{np.std(avg_gbp)}\n')
     if 'IntGrad' in args.explainer_config:
-        f.write(f'IntGrad P: mean:{np.mean(avg9)}, std:{np.std(avg9)}')
+        f.write(f'IntGrad P: mean:{np.mean(avg9)}, std:{np.std(avg9)}\n')
     f.close()
