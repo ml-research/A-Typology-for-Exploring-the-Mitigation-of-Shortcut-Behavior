@@ -284,10 +284,10 @@ for i, learner in enumerate(trained_learners):
     # write results to file
     f = open(f"./output_wr_metric/{args.dataset}-{loss_config_string}.txt", "w")
     
-    if 'GradCAM' in args.explainer_config:
-        f.write(f'Grad P: mean:{np.mean(avg_gradcam)}, std:{np.std(avg_gradcam)}\n')
     if 'IG' in args.explainer_config:
         f.write(f'IG P: mean:{np.mean(avg_ig)}, std:{np.std(avg_ig)}\n')
+    if 'GradCAM' in args.explainer_config:
+        f.write(f'Grad P: mean:{np.mean(avg_gradcam)}, std:{np.std(avg_gradcam)}\n')
     if 'LIME' in args.explainer_config:
         f.write(f'LIME P: mean:{np.mean(avg_lime)}, std:{np.std(avg_lime)}\n')
     if 'Saliency' in args.explainer_config:
