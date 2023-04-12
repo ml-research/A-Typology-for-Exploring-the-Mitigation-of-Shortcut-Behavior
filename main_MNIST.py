@@ -9,6 +9,7 @@ parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('-sb', '--save-best-epoch', action='store_true')
 parser.add_argument('-t', '--num-threads', type=int, default=5)
 parser.add_argument('-nce', '--no-counterexamples', action='store_true')
+parser.add_argument('-r', '--reduced-train-set', type=int, default=2, help="if set will shrink train set to x * batch_size")
 
 parser.add_argument('--rrr', type=int)
 parser.add_argument('--rrrg', type=int)
@@ -87,13 +88,17 @@ for run_id in args.runs:
     # generate unique and descriptive modelname
     MODELNAME = f'Learner_{args.dataset}{loss_config_string}_run={run_id}'
 
+    reduced_training_size = None
+    if args.reduced_train_set:
+        reduced_training_size = args.batch_size * args.reduced_train_set
+
     train_loader, test_loader = decoy_mnist_all_revised(
         fmnist=args.dataset,
         train_shuffle=True,
         device=DEVICE,
         batch_size=args.batch_size,
         generate_counterexamples=not args.no_counterexamples,
-        reduced_training_size=args.batch_size * 2
+        reduced_training_size=reduced_training_size
     )
 
     untrained_model = dnns.SimpleConvNet().to(DEVICE)
