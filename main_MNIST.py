@@ -9,7 +9,7 @@ parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('-sb', '--save-best-epoch', action='store_true')
 parser.add_argument('-t', '--num-threads', type=int, default=5)
 parser.add_argument('-nce', '--no-counterexamples', action='store_true')
-parser.add_argument('-r', '--reduced-train-set', type=int, default=2, help="if set will shrink train set to x * batch_size")
+parser.add_argument('-rt', '--reduced-train-set', type=int, help="if set will shrink train set to x * batch_size")
 
 parser.add_argument('--rrr', type=int)
 parser.add_argument('--rrrg', type=int)
@@ -150,6 +150,7 @@ avg9 = []
 
 
 for i, learner in enumerate(trained_learners):
+    print(f'evaluating learner {i+1}/{len(trained_learners)}')
 
 
     train_loader, test_loader = decoy_mnist_all_revised(
@@ -161,7 +162,6 @@ for i, learner in enumerate(trained_learners):
         #reduced_training_size=args.batch_size * 10
     )
 
-    print(f'evaluating learner {i}/{len(trained_learners)}')
     if 'GradCAM' in args.explainer_config:
         os.makedirs(f'output_images/{args.dataset}-expl/{loss_config_string}_grad/', exist_ok=True)
         explainer.explain_with_captum('grad_cam', learner.model, test_loader, range(len(test_loader)), \
