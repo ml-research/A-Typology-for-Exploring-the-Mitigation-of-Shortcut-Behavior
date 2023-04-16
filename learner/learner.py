@@ -131,13 +131,12 @@ class Learner:
 
             epoch_start_time = time.time()
 
-            for X, y, E_pnlt, E_rwrd, ce_mask in tqdm(train_loader, unit='batch'):
+            for X, y, E_pnlt, E_rwrd, non_ce_mask in tqdm(train_loader, unit='batch'):
 
                 self.optimizer.zero_grad()
                 X.requires_grad_()
 
-                logging.debug(
-                    f"batch consists of {len(X[~ce_mask])} examples and {len(X[ce_mask])} counterexamples")
+                logging.info(f"batch consists of {len(X[non_ce_mask])} examples and {len(X[~non_ce_mask])} counterexamples")
 
                 # initialize zero-loss tensors (as they may be unbound)
                 batch_loss_right_answer_ce = torch.tensor(
@@ -146,7 +145,7 @@ class Learner:
                 batch_loss_right_reason = torch.tensor(0., device=self.device)
 
                 # compute right-answer loss on CEs
-                X_ce, y_ce, _, _ = X[ce_mask], y[ce_mask], E_pnlt[ce_mask], E_rwrd[ce_mask]
+                X_ce, y_ce, _, _ = X[~non_ce_mask], y[~non_ce_mask], E_pnlt[~non_ce_mask], E_rwrd[~non_ce_mask]
                 if len(X_ce) > 0:
                     y_hat_ce = self.model(X_ce)
                     epoch_correct += (y_hat_ce.argmax(1) ==
@@ -158,7 +157,7 @@ class Learner:
                         f"loss_right_answer_ce={batch_loss_right_answer_ce}")
 
                 # compute right-answer AND right-reason loss on non-CEs
-                X, y, E_pnlt, E_rwrd = X[~ce_mask], y[~ce_mask], E_pnlt[~ce_mask], E_rwrd[~ce_mask]
+                X, y, E_pnlt, E_rwrd = X[non_ce_mask], y[non_ce_mask], E_pnlt[non_ce_mask], E_rwrd[non_ce_mask]
                 if len(X) > 0:  # required as rrr doesn't work on zero-sized tensors
                     y_hat = self.model(X)
                     epoch_correct += (y_hat.argmax(1) ==
