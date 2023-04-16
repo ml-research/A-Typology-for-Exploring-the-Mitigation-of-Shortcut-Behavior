@@ -55,7 +55,7 @@ if args.hintig:
     loss_config_string += f'_hintig={args.hintig}'
 if args.rbr:
     loss_config_string += f'_rbr={args.rbr}'
-if not args.generate_counterexamples:
+if args.generate_counterexamples:
     loss_config_string += '_ce'
 
 # different but pre-defined seed for each run
