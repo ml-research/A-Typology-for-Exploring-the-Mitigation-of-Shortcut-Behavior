@@ -8,7 +8,7 @@ parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
 parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('-sb', '--save-best-epoch', action='store_true')
 parser.add_argument('-t', '--num-threads', type=int, default=5)
-parser.add_argument('-nce', '--no-counterexamples', action='store_true')
+parser.add_argument('-ce', '--generate-counterexamples', action='store_true')
 parser.add_argument('-rt', '--reduced-train-set', type=int, help="if set will shrink train set to x * batch_size")
 
 parser.add_argument('--rrr', type=int)
@@ -55,7 +55,7 @@ if args.hintig:
     loss_config_string += f'_hintig={args.hintig}'
 if args.rbr:
     loss_config_string += f'_rbr={args.rbr}'
-if not args.no_counterexamples:
+if not args.generate_counterexamples:
     loss_config_string += '_ce'
 
 # different but pre-defined seed for each run
@@ -97,7 +97,7 @@ for run_id in args.runs:
         train_shuffle=True,
         device=DEVICE,
         batch_size=args.batch_size,
-        generate_counterexamples=not args.no_counterexamples,
+        generate_counterexamples=args.generate_counterexamples,
         reduced_training_size=reduced_training_size
     )
 
@@ -158,8 +158,7 @@ for i, learner in enumerate(trained_learners):
         train_shuffle=True,
         device=DEVICE,
         batch_size=args.batch_size,
-        generate_counterexamples=not args.no_counterexamples,
-        #reduced_training_size=args.batch_size * 10
+        generate_counterexamples=args.generate_counterexamples,
     )
 
     if 'GradCAM' in args.explainer_config:
