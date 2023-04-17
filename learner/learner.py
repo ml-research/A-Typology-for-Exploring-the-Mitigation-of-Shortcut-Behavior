@@ -136,7 +136,7 @@ class Learner:
                 self.optimizer.zero_grad()
                 X.requires_grad_()
 
-                logging.info(f"batch consists of {len(X[non_ce_mask])} examples and {len(X[~non_ce_mask])} counterexamples")
+                logging.debug(f"batch consists of {len(X[non_ce_mask])} examples and {len(X[~non_ce_mask])} counterexamples")
 
                 # initialize zero-loss tensors (as they may be unbound)
                 batch_loss_right_answer_ce = torch.tensor(

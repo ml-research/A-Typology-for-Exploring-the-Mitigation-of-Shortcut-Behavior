@@ -82,7 +82,9 @@ rtpt.start()
 ### Learner Training ###
 ########################
 
-for run_id in args.runs:
+for i, run_id in enumerate(args.runs):
+    print(f"run {i+1}/{len(args.runs)}")
+
     util.seed_all(SEEDS[run_id-1])
 
     # generate unique and descriptive modelname
@@ -158,7 +160,7 @@ for i, learner in enumerate(trained_learners):
         train_shuffle=True,
         device=DEVICE,
         batch_size=args.batch_size,
-        generate_counterexamples=args.generate_counterexamples,
+        #generate_counterexamples=args.generate_counterexamples,
     )
 
     if 'GradCAM' in args.explainer_config:
