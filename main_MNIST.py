@@ -18,7 +18,7 @@ parser.add_argument('--hint', type=int)
 parser.add_argument('--hintig', type=int)
 parser.add_argument('--rbr', type=int)
 
-parser.add_argument('-r', '--runs', default=range(1, 6), type=int, choices=range(1, 6), nargs='+', help='Which runs to perform (each run has a different seed)?')
+parser.add_argument('-r', '--runs', type=int, default=[1, 2, 3, 4, 5], choices=[1, 2, 3, 4, 5], nargs='+', help='Which runs to perform (each run has a different seed)?')
 
 parser.add_argument('--explainer-config', default='GradCAM IG LIME Saliency IxG DeepLift LRP GBP IntGrad', type=str,
                     choices=['GradCAM', 'IG', 'LIME', 'Saliency', \
