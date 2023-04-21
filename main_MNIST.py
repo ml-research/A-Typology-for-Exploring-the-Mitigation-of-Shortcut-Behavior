@@ -160,7 +160,7 @@ for i, learner in enumerate(trained_learners):
         train_shuffle=True,
         device=DEVICE,
         batch_size=args.batch_size,
-        #generate_counterexamples=args.generate_counterexamples,
+        #generate_counterexamples=args.generate_counterexamples, # TODO: discuss whether to allow CEs here
     )
 
     if 'GradCAM' in args.explainer_config:
