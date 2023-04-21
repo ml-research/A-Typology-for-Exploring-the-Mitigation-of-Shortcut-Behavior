@@ -1895,17 +1895,18 @@ def decoy_mnist_all_revised(fmnist=False, batch_size=256, device='cuda', train_s
                 E_rwrd = np.copy(E_pnlt)
 
     # initialize mask all non-ce
-    counterexample_mask = np.ones(60000, dtype=int)
-
+    counterexample_mask = np.zeros(60_000, dtype=int) # 0 = non CE, 1 = CE
     if generate_counterexamples:
         X_corrections, y_corrections = ce.get_corrections(X, E_ce, y, n_instances, n_counterexamples_per_instance, counterexample_strategy)
-        # add to train set
+
+        # add counterexamples to train set
         X = np.vstack([X, X_corrections])
         y = np.hstack([y, y_corrections])
+
         logging.info(f"Train set was augmented with counterexamples: X.size= {len(X)}, y.size= {len(y)}")
-        one = np.ones(60000, dtype=int)  # first 60000 are non CE
-        zero = np.zeros(60000, dtype=int) # next 60000 are CE
-        counterexample_mask = np.append(one, zero) # 1 = non-ce, 0 = ce
+        
+        # first 60000 are non CE, next 60000 are CE
+        counterexample_mask = np.append(np.zeros(60_000, dtype=int), np.ones(60_000, dtype=int)) # 0 = non CE, 1 = CE
 
         # just fill-up explanations with the non-ce values (won't be used)
         E_rwrd = np.append(E_rwrd, E_ce)
