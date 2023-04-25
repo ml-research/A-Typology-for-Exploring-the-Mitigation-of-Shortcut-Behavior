@@ -6,17 +6,17 @@ parser.add_argument('-b', '--batch-size', type=int, default=250)
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-3)
 parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
 parser.add_argument('-e', '--epochs', type=int, default=50)
-parser.add_argument('-sb', '--save-best-epoch', action='store_true')
+parser.add_argument('--dont-save-best-epoch', action='store_true')
 #parser.add_argument('-t', '--num-threads', type=int, default=5)
-parser.add_argument('-ce', '--generate-counterexamples', action='store_true')
 parser.add_argument('-rt', '--reduced-train-set', type=int, help="if set will shrink train set to x * batch_size")
 
-parser.add_argument('--rrr', type=int)
-parser.add_argument('--rrrg', type=int)
-parser.add_argument('--cdep', type=int)
-parser.add_argument('--hint', type=int)
-parser.add_argument('--hintig', type=int)
-parser.add_argument('--rbr', type=int)
+parser.add_argument('--ce', action='store_true')
+parser.add_argument('--rrr', const=1.5, nargs='?', type=float)
+parser.add_argument('--rrr-gc', const=10, nargs='?', type=float)
+parser.add_argument('--cdep', const=20, nargs='?', type=float)
+parser.add_argument('--hint', const=0.005, nargs='?', type=float)
+parser.add_argument('--hint-ig', const=0.00025, nargs='?', type=float)
+parser.add_argument('--rbr', const=5000, nargs='?', type=float)
 
 parser.add_argument('-r', '--runs', type=int, default=[1, 2, 3, 4, 5], choices=[1, 2, 3, 4, 5], nargs='+', help='Which runs to perform (each run has a different seed)?')
 
@@ -45,17 +45,17 @@ import numpy as np
 loss_config_string = str()
 if args.rrr:
     loss_config_string += f'_rrr={args.rrr}'
-if args.rrrg:
-    loss_config_string += f'_rrrg={args.rrrg}'
+if args.rrr_gc:
+    loss_config_string += f'_rrrg={args.rrr_gc}'
 if args.cdep:
     loss_config_string += f'_cdep={args.cdep}'
 if args.hint:
     loss_config_string += f'_hint={args.hint}'
-if args.hintig:
-    loss_config_string += f'_hintig={args.hintig}'
+if args.hint_ig:
+    loss_config_string += f'_hintig={args.hint_ig}'
 if args.rbr:
     loss_config_string += f'_rbr={args.rbr}'
-if args.generate_counterexamples:
+if args.ce:
     loss_config_string += '_ce'
 
 # different but pre-defined seed for each run
@@ -79,6 +79,24 @@ rtpt = RTPT(
 rtpt.start()
 
 
+###################
+### Data Loader ###
+###################
+# todo: find out whether we can use train/test loader for everything without re-initialization
+
+reduced_training_size = None
+if args.reduced_train_set:
+    reduced_training_size = args.batch_size * args.reduced_train_set
+
+train_loader, test_loader = decoy_mnist_all_revised(
+    fmnist=args.dataset,
+    train_shuffle=True,
+    device=DEVICE,
+    batch_size=args.batch_size,
+    generate_counterexamples=args.ce,
+    reduced_training_size=reduced_training_size
+)
+
 ########################
 ### Learner Training ###
 ########################
@@ -90,19 +108,6 @@ for i, run_id in enumerate(args.runs):
 
     # generate unique and descriptive modelname
     MODELNAME = f'Learner_{args.dataset}{loss_config_string}_run={run_id}'
-
-    reduced_training_size = None
-    if args.reduced_train_set:
-        reduced_training_size = args.batch_size * args.reduced_train_set
-
-    train_loader, test_loader = decoy_mnist_all_revised(
-        fmnist=args.dataset,
-        train_shuffle=True,
-        device=DEVICE,
-        batch_size=args.batch_size,
-        generate_counterexamples=args.generate_counterexamples,
-        reduced_training_size=reduced_training_size
-    )
 
     untrained_model = dnns.SimpleConvNet().to(DEVICE)
     optimizer = torch.optim.Adam(
@@ -118,18 +123,22 @@ for i, run_id in enumerate(args.runs):
         MODELNAME,
     )
 
+    # get regularizer rates
+    rate_rrr, rate_rrr_gc, rate_cdep, rate_hint, rate_hint_ig, rate_rbr = learner.evaluate_regularization_rates(train_loader)
+
+
     learner.fit(
         train_loader,
         test_loader,
         args.epochs,
-        save_best_epoch=args.save_best_epoch,
+        save_best_epoch=not args.dont_save_best_epoch,
 
-        loss_rrr_regularizer_rate=args.rrr,
-        loss_rrr_gc_regularizer_rate=args.rrrg,
-        loss_cdep_regularizer_rate=args.cdep,
-        loss_hint_regularizer_rate=args.hint,
-        loss_hint_ig_regularizer_rate=args.hintig,
-        loss_rbr_regularizer_rate=args.rbr,
+        loss_rrr_regularizer_rate=rate_rrr, #args.rrr,
+        loss_rrr_gc_regularizer_rate=rate_rrr_gc, #args.rrr_gc,
+        loss_cdep_regularizer_rate=rate_cdep, #args.cdep,
+        loss_hint_regularizer_rate=rate_hint, #args.hint,
+        loss_hint_ig_regularizer_rate=rate_hint_ig, #args.hint_ig,
+        loss_rbr_regularizer_rate=rate_rbr, #args.rbr,
     )
 
     trained_learners.append(learner)
@@ -155,13 +164,12 @@ avg9 = []
 for i, learner in enumerate(trained_learners):
     print(f'evaluating learner {i+1}/{len(trained_learners)}')
 
-
     train_loader, test_loader = decoy_mnist_all_revised(
         fmnist=args.dataset,
         train_shuffle=True,
         device=DEVICE,
         batch_size=args.batch_size,
-        #generate_counterexamples=args.generate_counterexamples, # TODO: discuss whether to allow CEs here
+        #generate_counterexamples=args.ce,
     )
 
     if 'GradCAM' in args.explainer:
