@@ -147,7 +147,7 @@ class Learner:
             "epoch,acc,loss,ra_loss,rr_loss,val_acc,val_loss,time\n")
 
         tensorboard_writer = SummaryWriter(
-            log_dir=f"runs/{self.modelname}_{run_id}", comment=f"{self.modelname}_{run_id}")
+            log_dir=f'runs/{self.modelname}_{run_id}')
 
 
         # initialize loss-functions
@@ -182,7 +182,7 @@ class Learner:
                 logging.debug(f"batch consists of {len(X[~ce_mask])} examples and {len(X[ce_mask])} counterexamples")
 
                 # collecting losses of batch
-                batch_losses = defaultdict(lambda: torch.tensor(0.))
+                batch_losses = defaultdict(lambda: torch.tensor(0., device=self.device))
 
                 self.optimizer.zero_grad()
                 X.requires_grad_()
