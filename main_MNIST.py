@@ -11,12 +11,12 @@ parser.add_argument('--dont-save-best-epoch', action='store_true')
 parser.add_argument('-rt', '--reduced-train-set', type=int, help="if set will shrink train set to x * batch_size")
 
 parser.add_argument('--ce', action='store_true')
-parser.add_argument('--rrr', const=1.5, nargs='?', type=float)
-parser.add_argument('--rrr-gc', const=10, nargs='?', type=float)
-parser.add_argument('--cdep', const=20, nargs='?', type=float)
-parser.add_argument('--hint', const=0.005, nargs='?', type=float)
-parser.add_argument('--hint-ig', const=0.00025, nargs='?', type=float)
-parser.add_argument('--rbr', const=5000, nargs='?', type=float)
+parser.add_argument('--rrr', const=0.040794797241687775, nargs='?', type=float)
+parser.add_argument('--rrr-gc', const=0.0002085704472847283, nargs='?', type=float)
+parser.add_argument('--cdep', const=1.0754512548446655, nargs='?', type=float)
+parser.add_argument('--hint', const=0.0007488631526939571, nargs='?', type=float)
+parser.add_argument('--hint-ig', const=1.0150821253773756e-05, nargs='?', type=float)
+parser.add_argument('--rbr', const=779.1973876953125, nargs='?', type=float)
 
 parser.add_argument('-r', '--runs', type=int, default=[1, 2, 3, 4, 5], choices=[1, 2, 3, 4, 5], nargs='+', help='Which runs to perform (each run has a different seed)?')
 
@@ -123,8 +123,10 @@ for i, run_id in enumerate(args.runs):
         MODELNAME,
     )
 
+    # TODO: find way to apply these rates automatically but also allow custom rates via args
     # get regularizer rates
-    rate_rrr, rate_rrr_gc, rate_cdep, rate_hint, rate_hint_ig, rate_rbr = learner.evaluate_regularization_rates(train_loader)
+    # INFO:root:calculated regularization_rates: rrr=0.040794797241687775,rrr_gc=0.0002085704472847283,cdep=1.0754512548446655,hint=0.0007488631526939571,hint_ig=1.0150821253773756e-05,rbr=779.1973876953125
+    #rate_rrr, rate_rrr_gc, rate_cdep, rate_hint, rate_hint_ig, rate_rbr = learner.evaluate_regularization_rates(train_loader)
 
 
     learner.fit(
@@ -133,12 +135,19 @@ for i, run_id in enumerate(args.runs):
         args.epochs,
         save_best_epoch=not args.dont_save_best_epoch,
 
-        loss_rrr_regularizer_rate=rate_rrr, #args.rrr,
-        loss_rrr_gc_regularizer_rate=rate_rrr_gc, #args.rrr_gc,
-        loss_cdep_regularizer_rate=rate_cdep, #args.cdep,
-        loss_hint_regularizer_rate=rate_hint, #args.hint,
-        loss_hint_ig_regularizer_rate=rate_hint_ig, #args.hint_ig,
-        loss_rbr_regularizer_rate=rate_rbr, #args.rbr,
+        loss_rrr_regularizer_rate=args.rrr,
+        loss_rrr_gc_regularizer_rate=args.rrr_gc,
+        loss_cdep_regularizer_rate=args.cdep,
+        loss_hint_regularizer_rate=args.hint,
+        loss_hint_ig_regularizer_rate=args.hint_ig,
+        loss_rbr_regularizer_rate=args.rbr,
+
+        # loss_rrr_regularizer_rate=rate_rrr, #args.rrr,
+        # loss_rrr_gc_regularizer_rate=rate_rrr_gc, #args.rrr_gc,
+        # loss_cdep_regularizer_rate=rate_cdep, #args.cdep,
+        # loss_hint_regularizer_rate=rate_hint, #args.hint,
+        # loss_hint_ig_regularizer_rate=rate_hint_ig, #args.hint_ig,
+        # loss_rbr_regularizer_rate=rate_rbr, #args.rbr,
     )
 
     trained_learners.append(learner)

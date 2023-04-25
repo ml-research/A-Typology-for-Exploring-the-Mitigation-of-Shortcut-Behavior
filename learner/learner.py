@@ -294,8 +294,9 @@ class Learner:
             tensorboard_writer.add_scalar('Acc/test', test_acc, epoch)
             tensorboard_writer.flush()
 
-            losses_summary = ', '.join(map(lambda x: f'{x[0]}={x[1].item():,.3f}', epoch_losses.items()))
-            print(f'E={epoch:0>2} | train_acc: {(train_acc):>0.1f}%, train_loss: {epoch_loss:>8f} | test_acc: {test_acc:>0.1f}%, test_loss: {test_loss:>8f} | {losses_summary}')
+            # todo: find better way to print losses
+            losses_summary = ', '.join(map(lambda x: f'{x[0]}={x[1].item():,.3f}' if x[1].item() != 0. else '-', epoch_losses.items()))
+            print(f'E={epoch:0>2} | train_acc={(train_acc):>0.1f}%, train_loss={epoch_loss:>8f} | test_acc={test_acc:>0.1f}%, test_loss={test_loss:>8f} | {losses_summary}')
 
             # write in logfile -> we need the logfile to see plots in Jupyter notebooks
             log_writer.write(
