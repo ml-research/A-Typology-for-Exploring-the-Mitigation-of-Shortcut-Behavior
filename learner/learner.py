@@ -42,25 +42,15 @@ class Learner:
         Will collect losses of all loss-functions on `train_loader` and return rates to regulate all losses to 1
         """
 
-        loss_sum_ra = 0
-
         loss_function_rr_rrr = RRRLoss(regularizer_rate=1)
-        loss_sum_rr_rrr = 0
-        
         loss_function_rrr_gc = RRRGradCamLoss(regularizer_rate=1)
-        loss_sum_rrr_gc = 0
-        
         loss_function_rr_cdep = CDEPLoss(regularizer_rate=1)
-        loss_sum_rr_cdep = 0
-        
         loss_function_rr_hint = HINTLoss(regularizer_rate=1)
-        loss_sum_rr_hint = 0
-        
         loss_function_rr_hint_ig = HINTLoss_IG(regularizer_rate=1)
-        loss_sum_rr_hint_ig = 0
-        
         loss_function_rr_rbr = RBRLoss(regularizer_rate=1)
-        loss_sum_rr_rbr = 0
+
+        loss_sums_rr = defaultdict(lambda: 0)
+        loss_sum_ra = 0
 
         # iterate all batches of train
         for X, y, E_pnlt, E_rwrd, ce_mask in tqdm(train_loader, unit="batch"):
@@ -71,23 +61,20 @@ class Learner:
             if len(X) > 0:  # required as rrr doesn't work on zero-sized tensors
                 y_hat = self.model(X)
                 loss_ra = self.loss_function_right_answer(y_hat, y)
-                loss_sum_ra += loss_ra
+                loss_sum_ra =+ loss_ra
 
-                loss_sum_rr_rrr += loss_function_rr_rrr.forward(X, E_rwrd, y_hat)  # todo check changes!
-                loss_sum_rrr_gc += loss_function_rrr_gc.forward(self.model, X, y, E_rwrd, y_hat, self.device)
-                loss_sum_rr_cdep += loss_function_rr_cdep.forward(self.model, X, y, E_rwrd, self.device)
-                loss_sum_rr_hint += loss_function_rr_hint.forward(self.model, X, y, E_rwrd, self.device)  # todo check changes!
-                loss_sum_rr_hint_ig += loss_function_rr_hint_ig.forward(self.model, X, E_rwrd, y_hat, self.device)  # todo check changes!
-                loss_sum_rr_rbr += loss_function_rr_rbr.forward(self.model, X, y, loss_ra, E_rwrd, y_hat)
+                loss_sums_rr['rrr'] += loss_function_rr_rrr.forward(X, E_rwrd, y_hat)  # todo check changes!
+                loss_sums_rr['rrr_gc'] += loss_function_rrr_gc.forward(self.model, X, y, E_rwrd, y_hat, self.device)
+                loss_sums_rr['cdep'] += loss_function_rr_cdep.forward(self.model, X, y, E_rwrd, self.device)
+                loss_sums_rr['hint'] += loss_function_rr_hint.forward(self.model, X, y, E_rwrd, self.device)  # todo check changes!
+                loss_sums_rr['hint_ig'] += loss_function_rr_hint_ig.forward(self.model, X, E_rwrd, y_hat, self.device)  # todo check changes!
+                loss_sums_rr['rbr'] += loss_function_rr_rbr.forward(self.model, X, y, loss_ra, E_rwrd, y_hat)
 
-        logging.info(f'calculated regularization_rates: rrr={loss_sum_ra/loss_sum_rr_rrr},rrr_gc={loss_sum_ra/loss_sum_rrr_gc},cdep={loss_sum_ra/loss_sum_rr_cdep},hint={loss_sum_ra/loss_sum_rr_hint},hint_ig={loss_sum_ra/loss_sum_rr_hint_ig},rbr={loss_sum_ra/loss_sum_rr_rbr}')
-        return \
-            (loss_sum_ra/loss_sum_rr_rrr).item(),\
-            (loss_sum_ra/loss_sum_rrr_gc).item(),\
-            (loss_sum_ra/loss_sum_rr_cdep).item(),\
-            (loss_sum_ra/loss_sum_rr_hint).item(),\
-            (loss_sum_ra/loss_sum_rr_hint_ig).item(),\
-            (loss_sum_ra/loss_sum_rr_rbr).item()
+        loss_shares_rr = {k:(loss_sum_ra/v).item() for (k, v) in loss_sums_rr.items()}
+        print(loss_shares_rr)
+
+        return loss_shares_rr['rrr'], loss_shares_rr['rrr_gc'], loss_shares_rr['cdep'], loss_shares_rr['hint'], loss_shares_rr['hint_ig'], loss_shares_rr['rbr']
+
 
     def score(self, dataloader, criterion, verbose=False):
         """Returns the acc and loss on the specified dataloader."""
@@ -118,6 +105,7 @@ class Learner:
             epochs,
             save_best_epoch=False,
             save_last=True,
+            early_stopping_patience=3,
             loss_rrr_regularizer_rate=None,
             loss_rrr_gc_regularizer_rate=None,
             loss_cdep_regularizer_rate=None,
@@ -161,8 +149,9 @@ class Learner:
 
         print("Start training...")
 
-        best_epoch_loss = 10000000
+        lowest_test_loss = 10000000
         elapsed_time = 0
+        early_stopping_worse_epochs_counter = 0
 
         for epoch in range(self.n_trained_epochs+1, epochs+1):
             # collecting losses of epoch
@@ -307,13 +296,24 @@ class Learner:
             # if epoch == disable_xil_loss_first_n_epochs and verbose and disable_xil_loss_first_n_epochs != 0:
             #     bs_store = (epoch, train_acc, train_loss, val_acc, val_loss)
 
-            # save the current best model on val set
-            if save_best_epoch and epoch_loss < best_epoch_loss:
-                best_epoch_loss = epoch_loss
-                self.save_to_checkpoint(n_trained_epochs=epoch, best=True)
-
             if save_last:
                 self.save_to_checkpoint(n_trained_epochs=epoch)
+
+            # save the current best model on val set
+            if test_loss < lowest_test_loss:
+                
+                lowest_test_loss = test_loss
+                early_stopping_worse_epochs_counter = 0
+
+                if save_best_epoch:
+                    self.save_to_checkpoint(n_trained_epochs=50, best=True) # set to 50 epochs to prevent resuming training if loaded
+            else:
+                early_stopping_worse_epochs_counter += 1
+                if early_stopping_worse_epochs_counter > early_stopping_patience:
+                    # exceeded allowed patience -> stop training
+                    print(f'test_loss did not improve within {early_stopping_worse_epochs_counter} epochs -> stopping training')
+                    break
+
             
 
         log_writer.close()
