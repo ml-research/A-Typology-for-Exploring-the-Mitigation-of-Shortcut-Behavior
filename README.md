@@ -1,7 +1,7 @@
 <!-- #region -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 # Programming Framework of XIL Typology
-Repository for the paper [A Typology to Explore the Mitigation of Shortcut Behavior](https://arxiv.org/abs/2203.03668). This repository focuses on evaluating XIL on Computer Vision tasks but can be adapted to e.g. NLP tasks with little effort. Furthermore, this repository implements and examines the following XIL methods:
+Repository for the paper [A Typology for Exploring the Mitigation of Shortcut Behavior](https://arxiv.org/abs/2203.03668). This repository focuses on evaluating XIL on Computer Vision tasks but can be adapted to e.g. NLP tasks with little effort. Furthermore, this repository implements and examines the following XIL methods:
 
 * Right for Right Reason (RRR) (Ross et al., 2017)
 * Right for the Better Reason (RBR) (Shao et al., 2021)
@@ -76,11 +76,19 @@ Main functions to run experiments:
 ## Citation
 If you like or use our work please cite us:
 ```bibtex
-@article{friedrich2022XIL_typo,
-      title={A Typology to Explore and Guide Explanatory Interactive Machine Learning}, 
-      author={Felix Friedrich and Wolfgang Stammer and Patrick Schramowski and Kristian Kersting},
-      year={2022},
-      journal={arXiv preprint arXiv:2203.03668}
+@article{friedrich2023xiltypology,
+  title = {A typology for exploring the mitigation of shortcut behaviour},
+  author={Felix Friedrich and Wolfgang Stammer and Patrick Schramowski and Kristian Kersting},
+  Journal = {Nature Machine Intelligence},
+  Publisher = {Nature Publishing Group},
+  year={2023},
+  month={Mar},
+  day={09},
+  volume={5},
+  pages={319-330},
+  issn={2522-5839},
+  doi={10.1038/s42256-023-00612-w},
+  url={https://doi.org/10.1038/s42256-023-00612-w}
 }
 ```
 <!-- #endregion -->
