@@ -33,85 +33,75 @@ class Learner:
 
         self.n_trained_epochs = 0
 
-        # model automatically tries to load checkpoint from previous run
+        # model automatically tries to load checkpoint from a previous run
         self.load_from_checkpoint()
 
 
-    def evaluate_regularization_rates(self, train_loader):
+    def calculate_normalization_rates(self, train_loader, loss_functions_to_consider):
         """
-        Will collect losses of all loss-functions on `train_loader` and return rates to regulate all losses to 1
+        Will calculate regularization rates for all `loss_functions` on `train_loader`
         """
 
-        loss_function_rr_rrr = RRRLoss(regularizer_rate=1)
-        loss_function_rrr_gc = RRRGradCamLoss(regularizer_rate=1)
-        loss_function_rr_cdep = CDEPLoss(regularizer_rate=1)
-        loss_function_rr_hint = HINTLoss(regularizer_rate=1)
-        loss_function_rr_hint_ig = HINTLoss_IG(regularizer_rate=1)
-        loss_function_rr_rbr = RBRLoss(regularizer_rate=1)
+        # instantiate all loss functions in advance (even if not all will be used)
+        loss_functions_rr = dict()
+        loss_functions_rr['rrr'] = RRRLoss(normalization_rate=1., regularization_rate=1.)
+        loss_functions_rr['rrr_gc'] = RRRGradCamLoss(normalization_rate=1., regularization_rate=1.)
+        loss_functions_rr['cdep'] = CDEPLoss(normalization_rate=1., regularization_rate=1.)
+        loss_functions_rr['hint'] = HINTLoss(normalization_rate=1., regularization_rate=1.)
+        loss_functions_rr['hint_ig'] = HINTLoss_IG(normalization_rate=1., regularization_rate=1.)
+        loss_functions_rr['rbr'] = RBRLoss(normalization_rate=1., regularization_rate=1.)
 
-        loss_sums_rr = defaultdict(lambda: 0)
-        loss_sum_ra = 0
+        loss_sum_ra_ce = 0.
+        loss_sum_ra_non_ce = 0.
+        loss_sums_rr = {k:0. for k in loss_functions_to_consider}
+        print(f'new loss_sums_rr={loss_sums_rr}')
 
         # iterate all batches of train
         for X, y, E_pnlt, E_rwrd, ce_mask in tqdm(train_loader, unit="batch"):
-            X, y, E_pnlt, E_rwrd = X[~ce_mask], y[~ce_mask], E_pnlt[~ce_mask], E_rwrd[~ce_mask]
-
             X.requires_grad_()
+
+            # compute right-answer loss on CEs
+            X_ce, y_ce, _, _ = X[ce_mask], y[ce_mask], E_pnlt[ce_mask], E_rwrd[ce_mask]
+            if len(X_ce) > 0:
+                y_hat_ce = self.model(X_ce)
+                loss_ra_ce = self.loss_function_right_answer(y_hat_ce, y_ce)
+                loss_sum_ra_ce += loss_ra_ce
+
+            # compute right-answer loss on non-CEs
+            X, y, E_pnlt, E_rwrd = X[~ce_mask], y[~ce_mask], E_pnlt[~ce_mask], E_rwrd[~ce_mask]
 
             if len(X) > 0:  # required as rrr doesn't work on zero-sized tensors
                 y_hat = self.model(X)
-                loss_ra = self.loss_function_right_answer(y_hat, y)
-                loss_sum_ra =+ loss_ra
+                loss_ra_non_ce = self.loss_function_right_answer(y_hat, y)
+                loss_sum_ra_non_ce =+ loss_ra_non_ce
 
-                loss_sums_rr['rrr'] += loss_function_rr_rrr.forward(X, E_rwrd, y_hat)  # todo check changes!
-                loss_sums_rr['rrr_gc'] += loss_function_rrr_gc.forward(self.model, X, y, E_rwrd, y_hat, self.device)
-                loss_sums_rr['cdep'] += loss_function_rr_cdep.forward(self.model, X, y, E_rwrd, self.device)
-                loss_sums_rr['hint'] += loss_function_rr_hint.forward(self.model, X, y, E_rwrd, self.device)  # todo check changes!
-                loss_sums_rr['hint_ig'] += loss_function_rr_hint_ig.forward(self.model, X, E_rwrd, y_hat, self.device)  # todo check changes!
-                loss_sums_rr['rbr'] += loss_function_rr_rbr.forward(self.model, X, y, loss_ra, E_rwrd, y_hat)
-
-        loss_shares_rr = {k:(loss_sum_ra/v).item() for (k, v) in loss_sums_rr.items()}
-        print(loss_shares_rr)
-
-        return loss_shares_rr['rrr'], loss_shares_rr['rrr_gc'], loss_shares_rr['cdep'], loss_shares_rr['hint'], loss_shares_rr['hint_ig'], loss_shares_rr['rbr']
+                # iterate over set of loss function keys to consider
+                for k in loss_functions_to_consider:
+                    loss_sums_rr[k] += loss_functions_rr[k].forward(self.model, X, y, loss_ra_non_ce, E_rwrd, y_hat, self.device).detach()
 
 
-    def score(self, dataloader, criterion, verbose=False):
-        """Returns the acc and loss on the specified dataloader."""
-        size = len(dataloader.dataset)
-        self.model.eval()
-        test_loss, correct = 0, 0
-        with torch.no_grad():
-            for data in dataloader:
-                X, y = data[0].to(self.device), data[1].to(self.device)
-                logits = self.model(X)
-                output = F.softmax(logits, dim=1)
-                test_loss += criterion(output, y).item()
-                correct += (output.argmax(1) ==
-                            y).type(torch.float).sum().item()
+        loss_normalization_rates = dict()
+        for k, loss_sum in loss_sums_rr.items():
+            # first we want to normalize all rr losses against the entire ra part (ce+non-ce)
+            # since we use multiple rr losses, we also need devide this value by the number of rr losses
+            normalized_against_ra = (loss_sum_ra_non_ce + loss_sum_ra_ce) / loss_sum
+            normalized_by_n_loss_funcs = normalized_against_ra / len(loss_sums_rr)
+            loss_normalization_rates[k] = normalized_by_n_loss_funcs.detach()
 
-        test_loss /= size
-        correct /= size
-        if verbose:
-            print(
-                f"Test Error: Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
-        return 100*correct, test_loss
+        return loss_normalization_rates
 
 
     def fit(
-            self,
-            train_loader,
-            test_loader,
-            epochs,
-            save_best_epoch=False,
-            save_last=True,
-            early_stopping_patience=3,
-            loss_rrr_regularizer_rate=None,
-            loss_rrr_gc_regularizer_rate=None,
-            loss_cdep_regularizer_rate=None,
-            loss_hint_regularizer_rate=None,
-            loss_hint_ig_regularizer_rate=None,
-            loss_rbr_regularizer_rate=None,
+        self,
+        train_loader,
+        test_loader,
+        epochs,
+        regularization_rates_rr: dict,
+
+        normalize_loss_functions=True,
+        early_stopping_patience=3,
+        save_best_epoch=False,
+        save_last=True,
     ):
         """
         Fits the learner using training data from dataloader for specified number 
@@ -128,6 +118,39 @@ class Learner:
             save_last: saves the model after every epoch .
         """
 
+        # if lambda None -> don't use loss func
+        # if lambda 0. -> evaluate reg-rate for loss func
+        # if reg-rate either None nor 0. -> use reg-rate for loss func
+
+        # default normalization rate for losses is 1 (no normalization / neutral element)
+        normalization_rates_rr = defaultdict(lambda: 1.)
+
+        if normalize_loss_functions:
+            # calculate and overwrite norm. rates for specified loss functions
+            # dependant on the selection of loss functions
+            normalization_rates_rr.update(
+                self.calculate_normalization_rates(train_loader, set(regularization_rates_rr.keys()))
+            )
+        logging.info(f'normalization_rates={normalization_rates_rr.items()}')
+        logging.info(f'regularization_rates={regularization_rates_rr.items()}')
+
+        # instantiate specified loss fucntions (reg rate may be default [1.0] if not further specified on cli arg)
+        loss_functions_rr = dict()
+        if 'rrr' in regularization_rates_rr:
+            loss_functions_rr['rrr'] = RRRLoss(normalization_rates_rr['rrr'], regularization_rates_rr['rrr'])
+        if 'rrr_gc' in regularization_rates_rr:
+            loss_functions_rr['rrr_gc'] = RRRGradCamLoss(normalization_rates_rr['rrr_gc'], regularization_rates_rr['rrr_gc'])
+        if 'cdep' in regularization_rates_rr:
+            loss_functions_rr['cdep'] = CDEPLoss(normalization_rates_rr['cdep'], regularization_rates_rr['cdep'])
+        if 'hint' in regularization_rates_rr:
+            loss_functions_rr['hint'] = HINTLoss(normalization_rates_rr['hint'], regularization_rates_rr['hint'])
+        if 'hint_ig' in regularization_rates_rr:
+            loss_functions_rr['hint_ig'] = HINTLoss_IG(normalization_rates_rr['hint_ig'], regularization_rates_rr['hint_ig'])
+        if 'rbr' in regularization_rates_rr:
+            loss_functions_rr['rbr'] = RBRLoss(normalization_rates_rr['rbr'], regularization_rates_rr['rbr'])
+
+        logging.info(f'loss_functions_rr={loss_functions_rr.items()}')
+
         run_id = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")  # str(uuid.uuid1())
 
         log_writer = open(f"logs/{self.modelname}_{run_id}.log", "w+")
@@ -137,26 +160,15 @@ class Learner:
         tensorboard_writer = SummaryWriter(
             log_dir=f'runs/{self.modelname}_{run_id}')
 
-
-        # initialize loss-functions
-        # todo: since they are stateless consider refactoring them into single function
-        loss_function_rrr = RRRLoss(regularizer_rate=loss_rrr_regularizer_rate) if loss_rrr_regularizer_rate else None
-        loss_function_rrr_gc = RRRGradCamLoss(regularizer_rate=loss_rrr_gc_regularizer_rate) if loss_rrr_gc_regularizer_rate else None
-        loss_function_cdep = CDEPLoss(regularizer_rate=loss_cdep_regularizer_rate) if loss_cdep_regularizer_rate else None
-        loss_function_hint = HINTLoss(regularizer_rate=loss_hint_regularizer_rate) if loss_hint_regularizer_rate else None
-        loss_function_hint_ig = HINTLoss_IG(regularizer_rate=loss_hint_ig_regularizer_rate) if loss_hint_ig_regularizer_rate else None
-        loss_function_rbr = RBRLoss(regularizer_rate=loss_rbr_regularizer_rate) if loss_rbr_regularizer_rate else None
-
         print("Start training...")
 
-        lowest_test_loss = 10000000
+        lowest_test_loss = 10_000_000
         elapsed_time = 0
         early_stopping_worse_epochs_counter = 0
 
-        for epoch in range(self.n_trained_epochs+1, epochs+1):
+        for epoch in range(self.n_trained_epochs+1, epochs+1): # shift epoch counting by one to start with epoch 1 (instead of 0)
             # collecting losses of epoch
             epoch_losses = defaultdict(lambda: torch.tensor(0., device=self.device))
-
 
             self.model.train()
             len_dataset = len(train_loader.dataset)
@@ -194,63 +206,16 @@ class Learner:
                     batch_losses['ra_non_ce'] += loss
                     epoch_losses['ra_non_ce'] += loss
 
-                    ###################
-                    # MultiLoss START #
-                    ###################
-
-                    if loss_function_rrr:
-                        loss = loss_function_rrr.forward(X, E_rwrd, y_hat)  # todo check changes!
-                        
-                        batch_losses['rr_rrr'] += loss
-                        epoch_losses['rr_rrr'] += loss
-                        batch_losses['rr'] += loss
+                    # calculate loss functions
+                    for k, loss_function in loss_functions_rr.items():
+                        loss = loss_function.forward(self.model, X, y, batch_losses['ra_non_ce'], E_rwrd, y_hat, self.device)
+                        batch_losses['rr_' + k] += loss
+                        epoch_losses['rr_' + k] += loss
                         epoch_losses['rr'] += loss
 
-                    if loss_function_rrr_gc:
-                        loss = loss_function_rrr_gc.forward(self.model, X, y, E_rwrd, y_hat, self.device)
-                        
-                        batch_losses['rr_rrr_gc'] += loss
-                        epoch_losses['rr_rrr_gc'] += loss
-                        batch_losses['rr'] += loss
-                        epoch_losses['rr'] += loss
+                # backward over combined losses
+                sum(batch_losses.values()).backward()
 
-                    if loss_function_cdep:
-                        loss = loss_function_cdep.forward(self.model, X, y, E_rwrd, self.device)
-
-                        batch_losses['rr_cdep'] += loss
-                        epoch_losses['rr_cdep'] += loss
-                        batch_losses['rr'] += loss
-                        epoch_losses['rr'] += loss
-
-                    if loss_function_hint:
-                        loss = loss_function_hint.forward(self.model, X, y, E_rwrd, self.device)  # todo check changes!
-
-                        batch_losses['rr_hint'] += loss
-                        epoch_losses['rr_hint'] += loss
-                        batch_losses['rr'] += loss
-                        epoch_losses['rr'] += loss
-
-                    if loss_function_hint_ig:
-                        loss = loss_function_hint_ig.forward(self.model, X, E_rwrd, y_hat, self.device)  # todo check changes!
-
-                        batch_losses['rr_hint_ig'] += loss
-                        epoch_losses['rr_hint_ig'] += loss
-                        batch_losses['rr'] += loss
-                        epoch_losses['rr'] += loss
-
-                    if loss_function_rbr:
-                        loss = loss_function_rbr.forward(self.model, X, y, batch_losses['ra_non_ce'], E_rwrd, y_hat)
-
-                        batch_losses['rr_rbr'] += loss
-                        epoch_losses['rr_rbr'] += loss
-                        batch_losses['rr'] += loss
-                        epoch_losses['rr'] += loss
-
-                    #################
-                    # MultiLoss END #
-                    #################
-
-                (batch_losses['ra_ce'] + batch_losses['ra_non_ce'] + batch_losses['rr']).backward()
                 self.optimizer.step()
 
             epoch_loss = epoch_losses['ra_ce'] + epoch_losses['ra_non_ce'] + epoch_losses['rr']
@@ -301,6 +266,7 @@ class Learner:
 
             # save the current best model on val set
             if test_loss < lowest_test_loss:
+                # todo: think about introducing epsilon for thresholing on stagnating loss curve
                 
                 lowest_test_loss = test_loss
                 early_stopping_worse_epochs_counter = 0
@@ -320,6 +286,29 @@ class Learner:
         tensorboard_writer.close()
 
         print(f"--> Training took {elapsed_time:>4f} seconds!")
+
+
+    def score(self, dataloader, criterion, verbose=False):
+        """Returns the acc and loss on the specified dataloader."""
+        size = len(dataloader.dataset)
+        self.model.eval()
+        test_loss, correct = 0, 0
+        with torch.no_grad():
+            for data in dataloader:
+                X, y = data[0].to(self.device), data[1].to(self.device)
+                logits = self.model(X)
+                output = F.softmax(logits, dim=1)
+                test_loss += criterion(output, y).item()
+                correct += (output.argmax(1) ==
+                            y).type(torch.float).sum().item()
+
+        test_loss /= size
+        correct /= size
+        if verbose:
+            print(
+                f"Test Error: Acc: {100*correct:>0.1f}%, Avg loss: {test_loss:>8f}")
+        return 100*correct, test_loss
+
 
 
     def save_to_checkpoint(self, n_trained_epochs, best=False):

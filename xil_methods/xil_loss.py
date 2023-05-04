@@ -12,6 +12,12 @@ import util
 import explainer
 
 
+"""
+All module's forward() functions have the same parameters, making it easier to iterate through collections of instances.
+
+This comes at the cost of providing some functions with unneccessary arguments.
+"""
+
 class RRRLoss(nn.Module):
     """
     Right for the Right Reason loss (RRR) as proposed by Ross et. al (2017) with minor changes.
@@ -21,7 +27,7 @@ class RRRLoss(nn.Module):
 
     """
 
-    def __init__(self, regularizer_rate=10, base_criterion=F.cross_entropy, rr_clipping=None):
+    def __init__(self, normalization_rate, regularization_rate, base_criterion=F.cross_entropy, rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -33,12 +39,13 @@ class RRRLoss(nn.Module):
             rr_clipping: clip the RR loss to a maximum per batch.   
         """
         super().__init__()
-        self.regularizer_rate = regularizer_rate
+        self.normalization_rate = normalization_rate
+        self.regularization_rate = regularization_rate
         self.base_criterion = base_criterion
         # self.weight = weight
         self.rr_clipping = rr_clipping
 
-    def forward(self, X, expl, logits, mask=None):
+    def forward(self, model, X, y, right_answer_loss, expl, logits, device=None, mask=None,):
         """
         Returns (loss, right_answer_loss, right_reason_loss)
 
@@ -64,7 +71,8 @@ class RRRLoss(nn.Module):
             # print("!!! MASK NOT NONE !!!")
 
         right_reason_loss = torch.sum(A_gradX)
-        right_reason_loss *= self.regularizer_rate
+        right_reason_loss *= self.normalization_rate
+        right_reason_loss *= self.regularization_rate
 
         # if self.weight is not None:
         #     right_reason_loss *= [y[0]]
@@ -82,7 +90,7 @@ class RBRLoss(nn.Module):
     Using identity matrix instead of hessian.
     """
 
-    def __init__(self, regularizer_rate=100000, base_criterion=F.cross_entropy,
+    def __init__(self, normalization_rate, regularization_rate, base_criterion=F.cross_entropy,
                  rr_clipping=None):
         """
         Args:
@@ -96,12 +104,13 @@ class RBRLoss(nn.Module):
                 and stabilizing training process.    
         """
         super().__init__()
-        self.regularizer_rate = regularizer_rate
+        self.normalization_rate = normalization_rate
+        self.regularization_rate = regularization_rate
         self.base_criterion = base_criterion
         self.rr_clipping = rr_clipping  # good rate for decoy mnist 1.0
         # self.weight = weight
 
-    def forward(self, model, X, y, right_answer_loss, expl, logits, mask=None):
+    def forward(self, model, X, y, right_answer_loss, expl, logits, device=None, mask=None):
         """
         Returns (loss, right_answer_loss, right_reason_loss)
 
@@ -148,7 +157,8 @@ class RBRLoss(nn.Module):
             # print("!!! MASK NOT NONE !!!")
 
         right_reason_loss = torch.sum(A_gradX)
-        right_reason_loss *= self.regularizer_rate
+        right_reason_loss *= self.normalization_rate
+        right_reason_loss *= self.regularization_rate
 
         # if self.weight is not None:
         #     right_reason_loss *= self.weight[y[0]]
@@ -168,7 +178,7 @@ class RRRGradCamLoss(nn.Module):
     Note: Can only be applied to CNNs.
     """
 
-    def __init__(self, regularizer_rate=1, base_criterion=F.cross_entropy, reduction='sum',
+    def __init__(self, normalization_rate, regularization_rate, base_criterion=F.cross_entropy, reduction='sum',
                  last_conv_specified=False, rr_clipping=None):
         """
         Args:
@@ -185,14 +195,15 @@ class RRRGradCamLoss(nn.Module):
                 and stabilizing training process.    
         """
         super().__init__()
-        self.regularizer_rate = regularizer_rate
+        self.normalization_rate = normalization_rate
+        self.regularization_rate = regularization_rate
         self.base_criterion = base_criterion
         self.reduction = reduction
         self.last_conv_specified = last_conv_specified
         # self.weight = weight
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, expl, logits, device, mask=None):
+    def forward(self, model, X, y, right_answer_loss, expl, logits, device, mask=None):
         """
         Returns right_answer_loss
 
@@ -245,7 +256,8 @@ class RRRGradCamLoss(nn.Module):
         elif self.reduction == 'mean':
             right_reason_loss = torch.sum(attr) / len(X)
 
-        right_reason_loss *= self.regularizer_rate
+        right_reason_loss *= self.normalization_rate
+        right_reason_loss *= self.regularization_rate
 
         if self.rr_clipping:
             if right_reason_loss > self.rr_clipping:
@@ -260,7 +272,7 @@ class CDEPLoss(nn.Module):
     See https://github.com/laura-rieger/deep-explanation-penalization.
     """
 
-    def __init__(self, regularizer_rate=1000000, base_criterion=F.cross_entropy,
+    def __init__(self, normalization_rate, regularization_rate, base_criterion=F.cross_entropy,
                  model_type='mnist', rr_clipping=None):
         """
         Args:
@@ -275,13 +287,14 @@ class CDEPLoss(nn.Module):
             model_type: specify the network architecture. Either 'mnist' or 'vgg'   
         """
         super().__init__()
-        self.regularizer_rate = regularizer_rate
+        self.normalization_rate = normalization_rate
+        self.regularization_rate = regularization_rate
         self.base_criterion = base_criterion
         # self.weight = weight
         self.model_type = model_type
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, expl, device):
+    def forward(self, model, X, y, right_answer_loss, expl, y_hat, device):
         """
         Returns right_answer_loss
 
@@ -301,7 +314,8 @@ class CDEPLoss(nn.Module):
         right_reason_loss += F.softmax(torch.stack(
             (rel.view(-1), irrel.view(-1)), dim=1), dim=1)[:, 0].mean()
 
-        right_reason_loss *= self.regularizer_rate
+        right_reason_loss *= self.normalization_rate
+        right_reason_loss *= self.regularization_rate
 
         # if self.weight is not None:
         #     right_reason_loss *= self.weight[y[0]]
@@ -322,7 +336,7 @@ class HINTLoss(nn.Module):
     of penalizing wrong reason it rewards right reason.
     """
 
-    def __init__(self, regularizer_rate=100, base_criterion=F.cross_entropy, reduction='sum',
+    def __init__(self, normalization_rate, regularization_rate, base_criterion=F.cross_entropy, reduction='sum',
                  last_conv_specified=False, upsample=False, positive_only=False, rr_clipping=None):
         """
         Args:
@@ -342,7 +356,8 @@ class HINTLoss(nn.Module):
                 and stabilizing training process. 
         """
         super().__init__()
-        self.regularizer_rate = regularizer_rate
+        self.normalization_rate = normalization_rate
+        self.regularization_rate = regularization_rate
         self.base_criterion = base_criterion
         self.reduction = reduction
         self.last_conv_specified = last_conv_specified
@@ -351,7 +366,7 @@ class HINTLoss(nn.Module):
         self.positive_only = positive_only
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, expl, device, mask=None):
+    def forward(self, model, X, y, right_answer_loss, expl, y_hat, device, mask=None):
         """
         Returns (loss, right_answer_loss, right_reason_loss)
 
@@ -418,7 +433,8 @@ class HINTLoss(nn.Module):
         elif self.reduction == 'mean':
             right_reason_loss += torch.sum(attr) / len(X)
 
-        right_reason_loss *= self.regularizer_rate
+        right_reason_loss *= self.normalization_rate
+        right_reason_loss *= self.regularization_rate
 
         # Human-Network Importance Alignment via loss
         if self.rr_clipping:
@@ -434,7 +450,7 @@ class HINTLoss_IG(nn.Module):
     HINT Loss extended version with IG instead of GradCam
     """
 
-    def __init__(self, regularizer_rate=50000, base_criterion=F.cross_entropy, reduction='sum', rr_clipping=None):
+    def __init__(self, normalization_rate, regularization_rate, base_criterion=F.cross_entropy, reduction='sum', rr_clipping=None):
         """
         Args:
             regularizer_rate: controls the influence of the right reason loss.
@@ -451,12 +467,13 @@ class HINTLoss_IG(nn.Module):
                 and stabilizing training process.
         """
         super().__init__()
-        self.regularizer_rate = regularizer_rate
+        self.normalization_rate = normalization_rate
+        self.regularization_rate = regularization_rate
         self.base_criterion = base_criterion
         self.reduction = reduction
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, expl, logits, device):
+    def forward(self, model, X, y, right_answer_loss, expl, logits, device):
         # calculate right answer loss
         model.eval()
 
@@ -475,7 +492,8 @@ class HINTLoss_IG(nn.Module):
         elif self.reduction == 'mean':
             right_reason_loss += torch.sum(A_gradX) / len(X)
 
-        right_reason_loss *= self.regularizer_rate
+        right_reason_loss *= self.normalization_rate
+        right_reason_loss *= self.regularization_rate
 
         # Human-Network Importance Alignment via loss
         if self.rr_clipping:

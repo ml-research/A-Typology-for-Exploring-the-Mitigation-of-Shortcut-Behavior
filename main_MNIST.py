@@ -3,6 +3,7 @@
 ########################
 
 import argparse
+from collections import defaultdict
 parser = argparse.ArgumentParser(prog="Learner (F)MNIST")
 
 parser.add_argument('-d', '--dataset', default='mnist', type=str, choices=['mnist', 'fmnist'])
@@ -15,14 +16,20 @@ parser.add_argument('--dont-save-best-epoch', action='store_true')
 parser.add_argument('-rt', '--reduced-train-set', type=int, help="if set will shrink train set to x * batch_size")
 
 parser.add_argument('--ce', action='store_true')
-parser.add_argument('--rrr', const=0., nargs='?', type=float)
-parser.add_argument('--rrr-gc', const=0., nargs='?', type=float)
-parser.add_argument('--cdep', const=0., nargs='?', type=float)
-parser.add_argument('--hint', const=0., nargs='?', type=float)
-parser.add_argument('--hint-ig', const=0., nargs='?', type=float)
-parser.add_argument('--rbr', const=0., nargs='?', type=float)
 
-parser.add_argument('-r', '--runs', type=int, default=[1, 2, 3, 4, 5], choices=[1, 2, 3, 4, 5], nargs='+', help='Which runs to perform (each run has a different seed)?')
+# if loss function arg not provided -> value None -> loss func won't be used
+# if loss function arg is provided without value -> use default 1. rate (rate will be evaluated during fit())
+# if loss function arg is provided with  value -> use value
+parser.add_argument('--rrr', const=1., nargs='?', type=float)
+parser.add_argument('--rrr-gc', const=1., nargs='?', type=float)
+parser.add_argument('--cdep', const=1., nargs='?', type=float)
+parser.add_argument('--hint', const=1., nargs='?', type=float)
+parser.add_argument('--hint-ig', const=1., nargs='?', type=float)
+parser.add_argument('--rbr', const=1., nargs='?', type=float)
+
+parser.add_argument('--no-normalization', default=False, action='store_true', help='disables normalization of right-reason loss functions')
+
+parser.add_argument('-r', '--runs', type=int, default=[1, 2, 3, 4, 5], choices=[1, 2, 3, 4, 5], nargs='+', help='specify runs to perform (each run has a different seed)?')
 
 parser.add_argument('--explainer', default='GradCAM IG LIME Saliency IxG DeepLift LRP GBP IntGrad', type=str,
                     choices=['GradCAM', 'IG', 'LIME', 'Saliency', \
@@ -41,7 +48,7 @@ def train_learners(train_loader, test_loader, args):
     # inform about run progress (instead of epochs)
     rtpt = RTPT(
         name_initials='EW',
-        experiment_name='Learner', 
+        experiment_name='Learner',
         max_iterations=len(args.runs)
     )
     rtpt.start()
@@ -56,8 +63,8 @@ def train_learners(train_loader, test_loader, args):
 
         untrained_model = dnns.SimpleConvNet().to(DEVICE)
         optimizer = torch.optim.Adam(
-            untrained_model.parameters(), 
-            lr=args.learning_rate, 
+            untrained_model.parameters(),
+            lr=args.learning_rate,
             weight_decay=args.weight_decay
         )
 
@@ -68,25 +75,29 @@ def train_learners(train_loader, test_loader, args):
             MODELNAME,
         )
 
-        # if loss func specified AND reg-rate are set via cli args we use provided values
-        # if loss func specified via cli args, but no reg-rate is provided, we evaluate best value on training set
-        # if loss func not specified, we don't use it
-        # TODO
-        args.rrr, args.rrr_gc, args.cdep, args.hint, args.hint_ig, args.rbr = learner.evaluate_regularization_rates(train_loader)
-
+        # create dict with 
+        rr_loss_reg_rates = dict()
+        if args.rrr:
+            rr_loss_reg_rates['rrr'] = args.rrr
+        if args.rrr_gc:
+            rr_loss_reg_rates['rrr_gc'] = args.rrr_gc
+        if args.cdep:
+            rr_loss_reg_rates['cdep'] = args.cdep
+        if args.hint:
+            rr_loss_reg_rates['hint'] = args.hint
+        if args.hint_ig:
+            rr_loss_reg_rates['hint_ig'] = args.hint_ig
+        if args.rbr:
+            rr_loss_reg_rates['rbr'] = args.rbr
 
         learner.fit(
             train_loader,
             test_loader,
             args.epochs,
-            save_best_epoch=not args.dont_save_best_epoch,
+            rr_loss_reg_rates,
 
-            loss_rrr_regularizer_rate=args.rrr,
-            loss_rrr_gc_regularizer_rate=args.rrr_gc,
-            loss_cdep_regularizer_rate=args.cdep,
-            loss_hint_regularizer_rate=args.hint,
-            loss_hint_ig_regularizer_rate=args.hint_ig,
-            loss_rbr_regularizer_rate=args.rbr,
+            normalize_loss_functions=not args.no_normalization,
+            save_best_epoch=not args.dont_save_best_epoch,
         )
 
         trained_learners.append(learner)
@@ -234,7 +245,7 @@ def evaluate_on_explainers(trained_learners, test_loader, args):
 
         # write results to file
         f = open(f"./output_wr_metric/{args.dataset}-{loss_config_string}.txt", "w")
-        
+
         if 'IG' in args.explainer:
             f.write(f'IG P: mean:{np.mean(avg_ig)}, std:{np.std(avg_ig)}\n')
         if 'GradCAM' in args.explainer:
@@ -271,6 +282,8 @@ from learner.models import dnns
 import torch
 import explainer
 import numpy as np
+from xil_methods.xil_loss import RRRGradCamLoss, RRRLoss, CDEPLoss, HINTLoss, HINTLoss_IG, RBRLoss
+
 
 # args define training behaviour -> build config string shared by all models
 loss_config_string = str()
