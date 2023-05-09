@@ -282,12 +282,13 @@ class Learner:
             else:
                 early_stopping_worse_epochs_counter += 1
                 if early_stopping_worse_epochs_counter > early_stopping_patience:
-                    # reset in case we continue with re-calculated normalization-rates
-                    early_stopping_worse_epochs_counter = 0
 
                     # exceeded allowed patience -> stop training
                     logging.info(f'test_loss did not improve within {early_stopping_worse_epochs_counter} epochs')
 
+                    # reset in case we continue with re-calculated normalization-rates
+                    early_stopping_worse_epochs_counter = 0
+                    
                     if normalize_loss_functions:
                         # instead of breaking now we re-calculate the normalization rates and continue training
                         normalization_rates_rr.update(
