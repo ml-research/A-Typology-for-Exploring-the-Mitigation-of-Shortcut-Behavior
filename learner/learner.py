@@ -37,12 +37,12 @@ class Learner:
         self.load_from_checkpoint()
 
 
-    def calculate_normalization_rates(self, train_loader, loss_functions_to_consider):
+    def calculate_normalization_rates(self, train_loader, loss_function_keys):
         """
-        Will calculate regularization rates for all `loss_functions` on `train_loader`
+        Will calculate regularization rates for all `loss_function_keys` on `train_loader`
         """
 
-        # instantiate all loss functions in advance (even if not all will be used)
+        # instantiate all loss functions in advance (may not all be used)
         loss_functions_rr = dict()
         loss_functions_rr['rrr'] = RRRLoss(normalization_rate=1., regularization_rate=1.)
         loss_functions_rr['rrr_gc'] = RRRGradCamLoss(normalization_rate=1., regularization_rate=1.)
@@ -53,11 +53,12 @@ class Learner:
 
         loss_sum_ra_ce = 0.
         loss_sum_ra_non_ce = 0.
-        loss_sums_rr = {k:0. for k in loss_functions_to_consider}
-        print(f'new loss_sums_rr={loss_sums_rr}')
+        loss_sums_rr = {k:0. for k in loss_function_keys}
+
+        logging.info('calculating normalization rates ...')
 
         # iterate all batches of train
-        for X, y, E_pnlt, E_rwrd, ce_mask in tqdm(train_loader, unit="batch"):
+        for X, y, E_pnlt, E_rwrd, ce_mask in train_loader:
             X.requires_grad_()
 
             # compute right-answer loss on CEs
@@ -76,17 +77,22 @@ class Learner:
                 loss_sum_ra_non_ce =+ loss_ra_non_ce
 
                 # iterate over set of loss function keys to consider
-                for k in loss_functions_to_consider:
+                for k in loss_function_keys:
                     loss_sums_rr[k] += loss_functions_rr[k].forward(self.model, X, y, loss_ra_non_ce, E_rwrd, y_hat, self.device).detach()
 
 
         loss_normalization_rates = dict()
-        for k, loss_sum in loss_sums_rr.items():
+        #print(f'loss_sum_ra_ce={loss_sum_ra_ce}, loss_sum_ra_non_ce={loss_sum_ra_non_ce}')
+
+        for k, loss_sum_rr in loss_sums_rr.items():
+
             # first we want to normalize all rr losses against the entire ra part (ce+non-ce)
+            normalized_against_ra = (loss_sum_ra_non_ce) / loss_sum_rr
+
             # since we use multiple rr losses, we also need devide this value by the number of rr losses
-            normalized_against_ra = (loss_sum_ra_non_ce + loss_sum_ra_ce) / loss_sum
-            normalized_by_n_loss_funcs = normalized_against_ra / len(loss_sums_rr)
-            loss_normalization_rates[k] = normalized_by_n_loss_funcs.detach()
+            loss_normalization_rates[k] = normalized_against_ra.detach() / len(loss_sums_rr)
+            
+            #print(f'k={k}, loss_sum_rr={loss_sum_rr}, normalized_loss_sum_rr={loss_sum_rr * loss_normalization_rates[k]}, normalized_against_ra={normalized_against_ra}, normalization_rate={loss_normalization_rates[k]}')
 
         return loss_normalization_rates
 
@@ -122,7 +128,7 @@ class Learner:
         # if lambda 0. -> evaluate reg-rate for loss func
         # if reg-rate either None nor 0. -> use reg-rate for loss func
 
-        # default normalization rate for losses is 1 (no normalization / neutral element)
+        # default normalization rate for losses is 1. (no normalization / neutral element)
         normalization_rates_rr = defaultdict(lambda: 1.)
 
         if normalize_loss_functions:
@@ -132,7 +138,7 @@ class Learner:
                 self.calculate_normalization_rates(train_loader, set(regularization_rates_rr.keys()))
             )
         logging.info(f'normalization_rates={normalization_rates_rr.items()}')
-        logging.info(f'regularization_rates={regularization_rates_rr.items()}')
+        logging.info(f'regularization_rates={regularization_rates_rr}')
 
         # instantiate specified loss fucntions (reg rate may be default [1.0] if not further specified on cli arg)
         loss_functions_rr = dict()
@@ -149,7 +155,7 @@ class Learner:
         if 'rbr' in regularization_rates_rr:
             loss_functions_rr['rbr'] = RBRLoss(normalization_rates_rr['rbr'], regularization_rates_rr['rbr'])
 
-        logging.info(f'loss_functions_rr={loss_functions_rr.items()}')
+        logging.info(f'loss_functions_rr={loss_functions_rr}')
 
         run_id = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")  # str(uuid.uuid1())
 
@@ -160,9 +166,9 @@ class Learner:
         tensorboard_writer = SummaryWriter(
             log_dir=f'runs/{self.modelname}_{run_id}')
 
-        print("Start training...")
+        logging.info("starting training ...")
 
-        lowest_test_loss = 10_000_000
+        lowest_test_loss = 10_000_000_000 # just a very large number
         elapsed_time = 0
         early_stopping_worse_epochs_counter = 0
 
@@ -276,9 +282,20 @@ class Learner:
             else:
                 early_stopping_worse_epochs_counter += 1
                 if early_stopping_worse_epochs_counter > early_stopping_patience:
+                    # reset in case we continue with re-calculated normalization-rates
+                    early_stopping_worse_epochs_counter = 0
+
                     # exceeded allowed patience -> stop training
-                    print(f'test_loss did not improve within {early_stopping_worse_epochs_counter} epochs -> stopping training')
-                    break
+                    logging.info(f'test_loss did not improve within {early_stopping_worse_epochs_counter} epochs')
+
+                    if normalize_loss_functions:
+                        # instead of breaking now we re-calculate the normalization rates and continue training
+                        normalization_rates_rr.update(
+                            self.calculate_normalization_rates(train_loader, set(regularization_rates_rr.keys()))
+                        )
+                    
+                    else:
+                        break
 
             
 
@@ -346,7 +363,7 @@ class Learner:
 
             try:
                 self.n_trained_epochs = checkpoint['n_trained_epochs']
-                print(f'Loaded {path}. Was trained for {self.n_trained_epochs} epochs')
+                logging.info(f'Loaded {path}. Was trained for {self.n_trained_epochs} epochs')
             except KeyError:
                 # in case we can't find field, just assume it was trained for all (50) epochs
                 self.n_trained_epochs = 50

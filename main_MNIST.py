@@ -27,7 +27,7 @@ parser.add_argument('--hint', const=1., nargs='?', type=float)
 parser.add_argument('--hint-ig', const=1., nargs='?', type=float)
 parser.add_argument('--rbr', const=1., nargs='?', type=float)
 
-parser.add_argument('--no-normalization', default=False, action='store_true', help='disables normalization of right-reason loss functions')
+parser.add_argument('-nn', '--no-normalization', default=False, action='store_true', help='disables normalization of right-reason loss functions')
 
 parser.add_argument('-r', '--runs', type=int, default=[1, 2, 3, 4, 5], choices=[1, 2, 3, 4, 5], nargs='+', help='specify runs to perform (each run has a different seed)?')
 
@@ -40,7 +40,7 @@ args = parser.parse_args()
 
 
 
-def train_learners(train_loader, test_loader, args):
+def train_model_on_losses(train_loader, test_loader, args):
 
     # collect trained learners in list (gets iterated during eval)
     trained_learners = []
@@ -107,7 +107,7 @@ def train_learners(train_loader, test_loader, args):
     return trained_learners
 
 
-def evaluate_on_explainers(trained_learners, test_loader, args):
+def evaluate_model_on_explainers(trained_learners, test_loader, args):
 
     avg_gradcam = []
     avg_ig = []
@@ -269,7 +269,11 @@ def evaluate_on_explainers(trained_learners, test_loader, args):
 
 
 import logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO, 
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logging.info(f'cli args: {args}')
 
 # imports take lots of time -> do it after argparse
@@ -332,9 +336,9 @@ train_loader, test_loader = decoy_mnist_all_revised(
 ######################
 ### Model Training ###
 ######################
-trained_learners = train_learners(train_loader, test_loader, args)
+trained_learners = train_model_on_losses(train_loader, test_loader, args)
 
 #########################
 ### Model Evaluation ####
 #########################
-evaluate_on_explainers(trained_learners, test_loader, args)
+evaluate_model_on_explainers(trained_learners, test_loader, args)
