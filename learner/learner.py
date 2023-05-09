@@ -219,7 +219,7 @@ class Learner:
                         epoch_losses['rr_' + k] += loss
                         epoch_losses['rr'] += loss
 
-                # backward over combined losses
+                # backward over batch losses
                 sum(batch_losses.values()).backward()
 
                 self.optimizer.step()
@@ -288,7 +288,7 @@ class Learner:
 
                     # reset in case we continue with re-calculated normalization-rates
                     early_stopping_worse_epochs_counter = 0
-                    
+
                     if normalize_loss_functions:
                         # instead of breaking now we re-calculate the normalization rates and continue training
                         normalization_rates_rr.update(

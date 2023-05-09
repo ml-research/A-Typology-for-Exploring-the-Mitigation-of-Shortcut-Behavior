@@ -31,7 +31,7 @@ parser.add_argument('-nn', '--no-normalization', default=False, action='store_tr
 
 parser.add_argument('-r', '--runs', type=int, default=[1, 2, 3, 4, 5], choices=[1, 2, 3, 4, 5], nargs='+', help='specify runs to perform (each run has a different seed)?')
 
-parser.add_argument('--explainer', default='GradCAM IG LIME Saliency IxG DeepLift LRP GBP IntGrad', type=str,
+parser.add_argument('--explainer', default=[], type=str,
                     choices=['GradCAM', 'IG', 'LIME', 'Saliency', \
                              'IxG', 'DeepLift', 'LRP', 'GBP', 'IntGrad'], nargs='+',
                     help='Which explainers to use?')
