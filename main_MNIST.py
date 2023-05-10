@@ -12,7 +12,7 @@ parser.add_argument('-lr', '--learning-rate', type=float, default=1e-3)
 parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
 parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('--dont-save-best-epoch', action='store_true')
-#parser.add_argument('-t', '--num-threads', type=int, default=5)
+parser.add_argument('-t', '--num-threads', type=int, default=8)
 parser.add_argument('-rt', '--reduced-train-set', type=int, help="if set will shrink train set to x * batch_size")
 
 parser.add_argument('--ce', action='store_true')
@@ -313,7 +313,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 logging.info(f"DEVICE={DEVICE}")
 
 torch.set_printoptions(linewidth=150)
-#torch.set_num_threads(args.num_threads)
+torch.set_num_threads(args.num_threads)
 
 
 ###################
