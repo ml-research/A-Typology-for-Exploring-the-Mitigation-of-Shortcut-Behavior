@@ -23,6 +23,7 @@ class Learner:
         device: str,
         modelname: str,
         loss_function_right_answer=F.cross_entropy,
+        restore_checkpoint: bool = True
     ):
 
         self.model = model
@@ -33,8 +34,11 @@ class Learner:
 
         self.n_trained_epochs = 0
 
-        # model automatically tries to load checkpoint from a previous run
-        self.load_from_checkpoint()
+        if restore_checkpoint:
+            # model automatically tries to load checkpoint from a previous run
+            self.load_from_checkpoint()
+        else:
+            logging.info(f'not restoring model from checkpoint')
 
     def calculate_normalization_rates(self, train_loader, loss_function_keys):
         """

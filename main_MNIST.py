@@ -12,9 +12,10 @@ parser.add_argument('-lr', '--learning-rate', type=float, default=1e-3)
 parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
 parser.add_argument('-e', '--epochs', type=int, default=50)
 parser.add_argument('--dont-save-best-epoch', action='store_true')
-parser.add_argument('-t', '--num-threads', type=int, default=8)
-parser.add_argument('-rt', '--reduced-train-set', type=int,
-                    help="if set will shrink train set to x * batch_size")
+parser.add_argument('-nt', '--num-threads', type=int, default=8)
+parser.add_argument('-nb', '--num-batches', type=int,
+                    help="will shrink dataset to number of batches")
+parser.add_argument('-nr', '--no-restore', default=False, action='store_true', help='if set, program will not try to load model from checkpoint')
 
 parser.add_argument('--ce', action='store_true')
 
@@ -76,6 +77,7 @@ def train_model_on_losses(train_loader, test_loader, args):
             optimizer,
             DEVICE,
             MODELNAME,
+            restore_checkpoint=not args.no_restore
         )
 
         # create dict with
@@ -301,8 +303,6 @@ from learner.models import dnns
 import torch
 import explainer
 import numpy as np
-from xil_methods.xil_loss import RRRGradCamLoss, RRRLoss, CDEPLoss, HINTLoss, HINTLoss_IG, RBRLoss
-
 
 # args define training behaviour -> build config string shared by all models
 loss_config_string = str()
@@ -336,8 +336,8 @@ torch.set_num_threads(args.num_threads)
 ###################
 
 reduced_training_size = None
-if args.reduced_train_set:
-    reduced_training_size = args.batch_size * args.reduced_train_set
+if args.num_batches:
+    reduced_training_size = args.batch_size * args.num_batches
 
 train_loader, test_loader = decoy_mnist_all_revised(
     fmnist=args.dataset,
