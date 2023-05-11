@@ -6,7 +6,6 @@ pandas
 h5py
 future
 tensorboard
-sklearn
 tqdm
 torchvision
 scipy

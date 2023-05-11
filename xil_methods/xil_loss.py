@@ -18,6 +18,7 @@ All module's forward() functions have the same parameters, making it easier to i
 This comes at the cost of providing some functions with unneccessary arguments.
 """
 
+
 class RRRLoss(nn.Module):
     """
     Right for the Right Reason loss (RRR) as proposed by Ross et. al (2017) with minor changes.
