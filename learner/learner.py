@@ -173,7 +173,7 @@ class Learner:
 
         logging.info(f'loss_functions_rr={loss_functions_rr}')
 
-        run_id = datetime.now().strftime("%d-%m-%Y_%H:%M:%S")  # str(uuid.uuid1())
+        run_id = datetime.now().strftime("%Y-%m-%d_%H:%M:%S")  # str(uuid.uuid1())
 
         log_writer = open(f"logs/{self.modelname}_{run_id}.log", "w+")
         log_writer.write(
@@ -194,6 +194,7 @@ class Learner:
             epoch_losses = defaultdict(
                 lambda: torch.tensor(0., device=self.device))
 
+            # required as we evaluate model each epoch (inside self.score())
             self.model.train()
             len_dataset = len(train_loader.dataset)
 
@@ -345,8 +346,9 @@ class Learner:
     def score(self, dataloader, criterion, verbose=False):
         """Returns the acc and loss on the specified dataloader."""
         size = len(dataloader.dataset)
-        self.model.eval()
         test_loss, correct = 0, 0
+
+        self.model.eval()
         with torch.no_grad():
             for data in dataloader:
                 X, y = data[0].to(self.device), data[1].to(self.device)
@@ -402,6 +404,7 @@ class Learner:
                     f'Loaded {path}. Was trained for {self.n_trained_epochs} epochs')
             except KeyError:
                 # in case we can't find field, just assume it was trained for all (50) epochs
+                # necessary for loading older checkpoints..
                 self.n_trained_epochs = 50
 
         except FileNotFoundError:
