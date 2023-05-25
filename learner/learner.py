@@ -54,9 +54,9 @@ class Learner:
         loss_functions_rr['cdep'] = CDEPLoss(
             normalization_rate=1., regularization_rate=1.)
         loss_functions_rr['hint'] = HINTLoss(
-            normalization_rate=1., regularization_rate=1.)
+            normalization_rate=1., regularization_rate=1., last_conv_specified=True, upsample=True)
         loss_functions_rr['hint_ig'] = HINTLoss_IG(
-            normalization_rate=1., regularization_rate=1.)
+            normalization_rate=1., regularization_rate=1., reduction='mean')
         loss_functions_rr['rbr'] = RBRLoss(
             normalization_rate=1., regularization_rate=1.)
 
@@ -73,22 +73,21 @@ class Learner:
             # compute right-answer loss on CEs
             X_ce, y_ce, _, _ = X[ce_mask], y[ce_mask], E_pnlt[ce_mask], E_rwrd[ce_mask]
             if len(X_ce) > 0:
-                y_hat_ce = self.model(X_ce)
-                loss_ra_ce = self.loss_function_right_answer(y_hat_ce, y_ce)
+                logits_ce = self.model(X_ce)
+                loss_ra_ce = self.loss_function_right_answer(logits_ce, y_ce)
                 loss_sum_ra_ce += loss_ra_ce
 
             # compute right-answer loss on non-CEs
             X, y, E_pnlt, E_rwrd = X[~ce_mask], y[~ce_mask], E_pnlt[~ce_mask], E_rwrd[~ce_mask]
 
             if len(X) > 0:  # required as rrr doesn't work on zero-sized tensors
-                y_hat = self.model(X)
-                loss_ra_non_ce = self.loss_function_right_answer(y_hat, y)
-                loss_sum_ra_non_ce = + loss_ra_non_ce
+                logits_non_ce = self.model(X)
+                loss_ra_non_ce = self.loss_function_right_answer(logits_non_ce, y)
+                loss_sum_ra_non_ce += loss_ra_non_ce
 
                 # iterate over set of loss function keys to consider
                 for k in loss_function_keys:
-                    loss_sums_rr[k] += loss_functions_rr[k].forward(
-                        self.model, X, y, loss_ra_non_ce, E_rwrd, y_hat, self.device).detach()
+                    loss_sums_rr[k] += loss_functions_rr[k](self.model, X, y, loss_ra_non_ce, E_pnlt, E_rwrd, logits_non_ce, self.device).detach()
 
         loss_normalization_rates = dict()
         # print(f'loss_sum_ra_ce={loss_sum_ra_ce}, loss_sum_ra_non_ce={loss_sum_ra_non_ce}')
@@ -102,7 +101,8 @@ class Learner:
             loss_normalization_rates[k] = normalized_against_ra.detach(
             ) / len(loss_sums_rr)
 
-            # print(f'k={k}, loss_sum_rr={loss_sum_rr}, normalized_loss_sum_rr={loss_sum_rr * loss_normalization_rates[k]}, normalized_against_ra={normalized_against_ra}, normalization_rate={loss_normalization_rates[k]}')
+            # print(f'k={k}, loss_sum_rr={loss_sum_rr}, normalized_loss_sum_rr={loss_sum_rr * loss_normalization_rates[k]}, 
+            # normalized_against_ra={normalized_against_ra}, normalization_rate={loss_normalization_rates[k]}')
 
         return loss_normalization_rates
 
@@ -114,7 +114,7 @@ class Learner:
         regularization_rates_rr: dict,
 
         normalize_loss_functions=True,
-        early_stopping_patience=3,
+        early_stopping_patience=5,
         save_best_epoch=False,
         save_last=True,
     ):
@@ -147,6 +147,9 @@ class Learner:
                 self.calculate_normalization_rates(
                     train_loader, set(regularization_rates_rr.keys()))
             )
+        else:
+            logging.info(f'not normalizing loss functions')
+
         logging.info(f'normalization_rates={normalization_rates_rr.items()}')
         logging.info(f'regularization_rates={regularization_rates_rr}')
 
@@ -163,10 +166,10 @@ class Learner:
                 normalization_rates_rr['cdep'], regularization_rates_rr['cdep'])
         if 'hint' in regularization_rates_rr:
             loss_functions_rr['hint'] = HINTLoss(
-                normalization_rates_rr['hint'], regularization_rates_rr['hint'])
+                normalization_rates_rr['hint'], regularization_rates_rr['hint'], last_conv_specified=True, upsample=True)
         if 'hint_ig' in regularization_rates_rr:
             loss_functions_rr['hint_ig'] = HINTLoss_IG(
-                normalization_rates_rr['hint_ig'], regularization_rates_rr['hint_ig'])
+                normalization_rates_rr['hint_ig'], regularization_rates_rr['hint_ig'], reduction='mean')
         if 'rbr' in regularization_rates_rr:
             loss_functions_rr['rbr'] = RBRLoss(
                 normalization_rates_rr['rbr'], regularization_rates_rr['rbr'])
@@ -204,7 +207,7 @@ class Learner:
             epoch_start_time = time.time()
 
             # iterate batches
-            for X, y, E_pnlt, E_rwrd, ce_mask in tqdm(train_loader):
+            for X, y, E_pnlt, E_rwrd, ce_mask in train_loader:
                 logging.debug(
                     f"batch consists of {len(X[~ce_mask])} examples and {len(X[ce_mask])} counterexamples")
 
@@ -218,32 +221,31 @@ class Learner:
                 # compute right-answer loss on CEs
                 X_ce, y_ce, _, _ = X[ce_mask], y[ce_mask], E_pnlt[ce_mask], E_rwrd[ce_mask]
                 if len(X_ce) > 0:
-                    y_hat_ce = self.model(X_ce)
-                    epoch_correct += (y_hat_ce.argmax(1) ==
+                    logits_ce = self.model(X_ce)
+                    epoch_correct += (logits_ce.argmax(1) ==
                                       y_ce).type(torch.float).sum().item()
-                    loss = self.loss_function_right_answer(y_hat_ce, y_ce)
+                    loss = self.loss_function_right_answer(logits_ce, y_ce)
                     batch_losses['ra_ce'] += loss
                     epoch_losses['ra_ce'] += loss
 
                 # compute right-answer AND right-reason loss on non-CEs
                 X, y, E_pnlt, E_rwrd = X[~ce_mask], y[~ce_mask], E_pnlt[~ce_mask], E_rwrd[~ce_mask]
                 if len(X) > 0:  # required as rrr doesn't work on zero-sized tensors
-                    y_hat = self.model(X)
-                    epoch_correct += (y_hat.argmax(1) ==
+                    logits = self.model(X)
+                    epoch_correct += (logits.argmax(1) ==
                                       y).type(torch.float).sum().item()
-                    loss = self.loss_function_right_answer(y_hat, y)
+                    loss = self.loss_function_right_answer(logits, y)
                     batch_losses['ra_non_ce'] += loss
                     epoch_losses['ra_non_ce'] += loss
 
                     # calculate loss functions
                     for k, loss_function in loss_functions_rr.items():
-                        loss = loss_function.forward(
-                            self.model, X, y, batch_losses['ra_non_ce'], E_rwrd, y_hat, self.device)
+                        loss = loss_function(self.model, X, y, batch_losses['ra_non_ce'], E_pnlt, E_rwrd, logits, self.device)
                         batch_losses['rr_' + k] += loss
                         epoch_losses['rr_' + k] += loss
                         epoch_losses['rr'] += loss
 
-                # backward over batch losses
+                # backward over summed batch losses
                 sum(batch_losses.values()).backward()
 
                 self.optimizer.step()
