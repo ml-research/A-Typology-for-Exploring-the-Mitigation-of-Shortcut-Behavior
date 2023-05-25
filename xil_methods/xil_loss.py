@@ -46,15 +46,19 @@ class RRRLoss(nn.Module):
         # self.weight = weight
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, right_answer_loss, expl, logits, device=None, mask=None,):
+    def forward(self, model, X, y, ra_loss, E_pnlt, E_rwrd, logits, device=None, mask=None,):
         """
-        Returns (loss, right_answer_loss, right_reason_loss)
+        Returns Right-Reason loss
 
         Args:
-            X: inputs.
-            y: ground-truth labels.
-            expl: explanation annotations masks (ones penalize regions).
-            logits: model output logits. 
+            model: pytorch model.
+            X: inputs (train set).
+            y: Ground-truth labels.
+            ra_loss: Right-Answer loss predicting y through X.
+            E_pnlt: Explanation annotations matrix (ones penalize regions).
+            E_rwrd: Explanation annotations matrix (ones reward regions).
+            logits: model output logits with input X.
+            device: either 'cpu' or 'cuda' 
         """
         # get gradients w.r.t. to the input
         log_prob_ys = F.log_softmax(logits, dim=1)
@@ -64,7 +68,7 @@ class RRRLoss(nn.Module):
 
         # if expl.shape [n,1,h,w] and gradXes.shape [n,3,h,w] then torch broadcasting
         # is used implicitly
-        A_gradX = torch.mul(expl, gradXes) ** 2
+        A_gradX = torch.mul(E_pnlt, gradXes) ** 2
 
         if mask is not None:
             for i in range(len(A_gradX)):
@@ -111,25 +115,28 @@ class RBRLoss(nn.Module):
         self.rr_clipping = rr_clipping  # good rate for decoy mnist 1.0
         # self.weight = weight
 
-    def forward(self, model, X, y, right_answer_loss, expl, logits, device=None, mask=None):
+    def forward(self, model, X, y, ra_loss, E_pnlt, E_rwrd, logits, device=None, mask=None):
         """
-        Returns (loss, right_answer_loss, right_reason_loss)
+        Returns Right-Reason loss
 
         Args:
             model: pytorch model.
-            X: inputs.
-            y: ground-truth labels.
-            expl: explanation annotations masks (ones penalize regions).
-            logits: model output logits. 
+            X: inputs (train set).
+            y: Ground-truth labels.
+            ra_loss: Right-Answer loss predicting y through X.
+            E_pnlt: Explanation annotations matrix (ones penalize regions).
+            E_rwrd: Explanation annotations matrix (ones reward regions).
+            logits: model output logits with input X.
+            device: either 'cpu' or 'cuda' 
         """
         # use information from the influence function (IF)
         # to compute saliency maps of features and penalize features according to expl masks
 
         # GET gradients of Influnece function
         # get loss gradients wrt to model params
-        right_answer_loss.retain_grad()
-        loss_grads_wrt_model_params_all = torch.autograd.grad(right_answer_loss, model.parameters(),
-                                                              torch.ones_like(right_answer_loss), create_graph=True, allow_unused=True)
+        ra_loss.retain_grad()
+        loss_grads_wrt_model_params_all = torch.autograd.grad(ra_loss, model.parameters(),
+                                                              torch.ones_like(ra_loss), create_graph=True, allow_unused=True)
         # currently the grads are a list of every grad loss for all params wrt to the layer
         # --> we need to get the sum of all grads
         loss_grads_wrt_model_params = torch.sum(
@@ -150,7 +157,7 @@ class RBRLoss(nn.Module):
         # Right reason = regularizer x (IF grads x IG grads)**2
 
         grads = torch.mul(if_grads, ig_grads)
-        A_gradX = torch.mul(expl, grads) ** 2
+        A_gradX = torch.mul(E_pnlt, grads) ** 2
 
         if mask is not None:
             for i in range(len(A_gradX)):
@@ -204,17 +211,19 @@ class RRRGradCamLoss(nn.Module):
         # self.weight = weight
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, right_answer_loss, expl, logits, device, mask=None):
+    def forward(self, model, X, y, ra_loss, E_pnlt, E_rwrd, logits, device, mask=None):
         """
-        Returns right_answer_loss
+        Returns Right-Reason loss
 
         Args:
-            X: inputs.
-            y: ground-truth labels.
-            expl: explanation annotations matrix (ones penalize regions).
-            logits: model output logits. 
-            device:
-            mask:
+            model: pytorch model.
+            X: inputs (train set).
+            y: Ground-truth labels.
+            ra_loss: Right-Answer loss predicting y through X.
+            E_pnlt: Explanation annotations matrix (ones penalize regions).
+            E_rwrd: Explanation annotations matrix (ones reward regions).
+            logits: model output logits with input X.
+            device: either 'cpu' or 'cuda' 
         """
         # get gradients w.r.t. to the input
         log_ys = torch.argmax(F.softmax(logits, dim=1), dim=1)
@@ -235,7 +244,7 @@ class RRRGradCamLoss(nn.Module):
 
         # downsample expl masks to match saliency masks
         h, w = norm_saliencies.shape[2], norm_saliencies.shape[3]
-        downsampled_expl = transforms.Resize((h, w))(expl)
+        downsampled_expl = transforms.Resize((h, w))(E_pnlt)
 
         attr = torch.mul(downsampled_expl, norm_saliencies) ** 2
 
@@ -295,21 +304,25 @@ class CDEPLoss(nn.Module):
         self.model_type = model_type
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, right_answer_loss, expl, y_hat, device):
+    def forward(self, model, X, y, ra_loss, E_pnlt, E_rwrd, logits, device):
         """
-        Returns right_answer_loss
+        Returns Right-Reason loss
 
         Args:
             model: pytorch model.
             X: inputs (train set).
             y: Ground-truth labels.
-            expl: Explanation annotations matrix (ones penalize regions).
+            ra_loss: Right-Answer loss predicting y through X.
+            E_pnlt: Explanation annotations matrix (ones penalize regions).
+            E_rwrd: Explanation annotations matrix (ones reward regions).
+            logits: model output logits with input X.
+            device: either 'cpu' or 'cuda' 
         """
         # rel, irrel = cd.cd(expl, X, model, model_type=model_type, device=device)
         right_reason_loss = torch.zeros(1,).to(device)
 
         # calculate Contextual Decompostions (CD)
-        rel, irrel = cd.cd(X, model, expl, device=device,
+        rel, irrel = cd.cd(X, model, E_pnlt, device=device,
                            model_type=self.model_type)
 
         right_reason_loss += F.softmax(torch.stack(
@@ -367,20 +380,21 @@ class HINTLoss(nn.Module):
         self.positive_only = positive_only
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, right_answer_loss, expl, y_hat, device, mask=None):
+    def forward(self, model, X, y, ra_loss, E_pnlt, E_rwrd, logits, device, mask=None):
         """
-        Returns (loss, right_answer_loss, right_reason_loss)
+        Returns Right-Reason loss
 
         Args:
             model: pytorch model.
             X: inputs (train set).
             y: Ground-truth labels.
-            expl: Explanation annotations matrix (ones penalize regions).
-            logits: model output logits.
+            ra_loss: Right-Answer loss predicting y through X.
+            E_pnlt: Explanation annotations matrix (ones penalize regions).
+            E_rwrd: Explanation annotations matrix (ones reward regions).
+            logits: model output logits with input X.
             device: either 'cpu' or 'cuda' 
         """
-        # human importance map = expl: -> array {0,1} region with high importance have ones
-        # calculate right answer loss
+        # human importance map = E_rwrd: -> array {0,1} region with high importance have ones
         model.eval()
 
         # network importance score --> compute GradCam attribution of last conv layer
@@ -400,22 +414,22 @@ class HINTLoss(nn.Module):
 
         if self.upsample:  # upsample saliency masks to match expl masks
             # resize grad attribution to match explanation size
-            h, w = expl.shape[2], expl.shape[3]
+            h, w = E_rwrd.shape[2], E_rwrd.shape[3]
             upsampled_saliencies = LayerAttribution.interpolate(
                 norm_saliencies, (h, w))
             if mask is not None:
-                for i in range(len(expl)):
+                for i in range(len(E_rwrd)):
                     upsampled_saliencies[i] = mask[i] * upsampled_saliencies[i]
-                    expl[i] = mask[i] * expl[i]
+                    E_rwrd[i] = mask[i] * E_rwrd[i]
                 # print("!!! MASK NOT NONE !!!")
-            attr = F.mse_loss(upsampled_saliencies, expl,
+            attr = F.mse_loss(upsampled_saliencies, E_rwrd,
                               reduction=self.reduction)
 
         else:  # downsample expl masks to match saliency masks
             h, w = norm_saliencies.shape[2], norm_saliencies.shape[3]
-            downsampled_expl = transforms.Resize((h, w))(expl)
+            downsampled_expl = transforms.Resize((h, w))(E_rwrd)
             if mask is not None:
-                for i in range(len(expl)):
+                for i in range(len(E_rwrd)):
                     downsampled_expl[i] = mask[i] * downsampled_expl[i]
                     norm_saliencies[i] = mask[i] * norm_saliencies[i]
                 # print("!!! MASK NOT NONE !!!")
@@ -474,8 +488,20 @@ class HINTLoss_IG(nn.Module):
         self.reduction = reduction
         self.rr_clipping = rr_clipping
 
-    def forward(self, model, X, y, right_answer_loss, expl, logits, device):
-        # calculate right answer loss
+    def forward(self, model, X, y, ra_loss, E_pnlt, E_rwrd, logits, device):
+        """
+        Returns Right-Reason loss
+
+        Args:
+            model: pytorch model.
+            X: inputs (train set).
+            y: Ground-truth labels.
+            ra_loss: Right-Answer loss predicting y through X.
+            E_pnlt: Explanation annotations matrix (ones penalize regions).
+            E_rwrd: Explanation annotations matrix (ones reward regions).
+            logits: model output logits with input X.
+            device: either 'cpu' or 'cuda' 
+        """
         model.eval()
 
         # get gradients w.r.t. to the input
@@ -484,7 +510,7 @@ class HINTLoss_IG(nn.Module):
         gradXes = torch.autograd.grad(log_prob_ys, X, torch.ones_like(
             log_prob_ys), create_graph=True, allow_unused=True)[0]
 
-        A_gradX = F.mse_loss(gradXes, expl, reduction=self.reduction)
+        A_gradX = F.mse_loss(gradXes, E_rwrd, reduction=self.reduction)
 
         right_reason_loss = torch.zeros(1,).to(device)
 
