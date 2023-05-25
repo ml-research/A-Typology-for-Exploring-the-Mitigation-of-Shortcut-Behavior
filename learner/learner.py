@@ -326,19 +326,8 @@ class Learner:
                     # exceeded allowed patience -> stop training
                     logging.info(
                         f'test_loss did not improve within {early_stopping_worse_epochs_counter} epochs')
-
-                    # reset in case we continue with re-calculated normalization-rates
-                    early_stopping_worse_epochs_counter = 0
-
-                    if normalize_loss_functions:
-                        # instead of breaking now we re-calculate the normalization rates and continue training
-                        normalization_rates_rr.update(
-                            self.calculate_normalization_rates(
-                                train_loader, set(regularization_rates_rr.keys()))
-                        )
-
-                    else:
-                        break
+                    
+                    break
 
         log_writer.close()
         tensorboard_writer.close()
