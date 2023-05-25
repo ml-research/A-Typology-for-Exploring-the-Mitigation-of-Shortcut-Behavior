@@ -33,12 +33,12 @@ parser.add_argument('-nn', '--no-normalization', default=False, action='store_tr
                     help='disables normalization of right-reason loss functions')
 
 parser.add_argument('-r', '--runs', type=int, default=[1, 2, 3, 4, 5], choices=[
-                    1, 2, 3, 4, 5], nargs='+', help='specify runs to perform (each run has a different seed)?')
+                    1, 2, 3, 4, 5], nargs='+', help='specify runs to perform (each run uses its own seed)')
 
 parser.add_argument('--explainer', default=[], type=str,
                     choices=['GradCAM', 'IG', 'LIME', 'Saliency',
                              'IxG', 'DeepLift', 'LRP', 'GBP', 'IntGrad'], nargs='+',
-                    help='Which explainers to use?')
+                    help='specifies explainers to use during evaluation')
 
 args = parser.parse_args()
 
@@ -344,7 +344,7 @@ if args.num_batches:
 
 train_loader, test_loader = decoy_mnist_all_revised(
     fmnist=args.dataset,
-    train_shuffle=False, # TODO: set True after testing
+    train_shuffle=True,
     device=DEVICE,
     batch_size=args.batch_size,
     generate_counterexamples=args.generate_counterexamples,
