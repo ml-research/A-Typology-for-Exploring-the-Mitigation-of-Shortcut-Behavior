@@ -7,7 +7,7 @@ parser = argparse.ArgumentParser(prog="Learner (F)MNIST")
 
 parser.add_argument('-d', '--dataset', default='mnist',
                     type=str, choices=['mnist', 'fmnist'])
-parser.add_argument('-b', '--batch-size', type=int, default=250)
+parser.add_argument('-b', '--batch-size', type=int, default=256)
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-3)
 parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
 parser.add_argument('-e', '--epochs', type=int, default=50)
@@ -80,9 +80,8 @@ def train_model_on_losses(train_loader, test_loader, args):
             restore_checkpoint=not args.no_restore
         )
 
-        learner.compare_original_and_revised_loss_functions(train_loader)
-
-        exit()
+        # learner.compare_original_and_revised_loss_functions(train_loader)
+        # exit()
 
         # create dict with
         rr_loss_reg_rates = dict()
@@ -345,7 +344,7 @@ if args.num_batches:
 
 train_loader, test_loader = decoy_mnist_all_revised(
     fmnist=args.dataset,
-    train_shuffle=True,
+    train_shuffle=False, # TODO: set True after testing
     device=DEVICE,
     batch_size=args.batch_size,
     generate_counterexamples=args.generate_counterexamples,
