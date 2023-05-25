@@ -17,7 +17,7 @@ parser.add_argument('-nb', '--num-batches', type=int,
                     help="will shrink dataset to number of batches")
 parser.add_argument('-nr', '--no-restore', default=False, action='store_true', help='if set, program will not try to load model from checkpoint')
 
-parser.add_argument('--ce', action='store_true')
+parser.add_argument('-ce', '--generate-counterexamples', action='store_true')
 
 # if loss function arg not provided -> value None -> loss func won't be used
 # if loss function arg is provided without value -> use default 1. rate (rate will be evaluated during fit())
@@ -79,6 +79,10 @@ def train_model_on_losses(train_loader, test_loader, args):
             MODELNAME,
             restore_checkpoint=not args.no_restore
         )
+
+        learner.compare_original_and_revised_loss_functions(train_loader)
+
+        exit()
 
         # create dict with
         rr_loss_reg_rates = dict()
@@ -318,7 +322,7 @@ if args.hint_ig:
     loss_config_string += f'_hintig={args.hint_ig}'
 if args.rbr:
     loss_config_string += f'_rbr={args.rbr}'
-if args.ce:
+if args.generate_counterexamples:
     loss_config_string += '_ce'
 
 # different but pre-defined seed for each run
@@ -344,7 +348,7 @@ train_loader, test_loader = decoy_mnist_all_revised(
     train_shuffle=True,
     device=DEVICE,
     batch_size=args.batch_size,
-    generate_counterexamples=args.ce,
+    generate_counterexamples=args.generate_counterexamples,
     reduced_training_size=reduced_training_size
 )
 
