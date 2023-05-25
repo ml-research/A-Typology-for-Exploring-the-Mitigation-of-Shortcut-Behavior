@@ -5,8 +5,7 @@
 import argparse
 parser = argparse.ArgumentParser(prog="Learner (F)MNIST")
 
-parser.add_argument('-d', '--dataset', default='mnist',
-                    type=str, choices=['mnist', 'fmnist'])
+parser.add_argument('--fmnist', default=False, action='store_true', help='use the Fashion-MNIST instead of MNIST dataset')
 parser.add_argument('-b', '--batch-size', type=int, default=256)
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-3)
 parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
@@ -15,7 +14,7 @@ parser.add_argument('--dont-save-best-epoch', action='store_true')
 parser.add_argument('-nt', '--num-threads', type=int, default=8)
 parser.add_argument('-nb', '--num-batches', type=int,
                     help="will shrink dataset to number of batches")
-parser.add_argument('-nr', '--no-restore', default=False, action='store_true', help='if set, program will not try to load model from checkpoint')
+parser.add_argument('-nr', '--no-restore', default=False, action='store_true', help="do not try to load model from checkpoint")
 
 parser.add_argument('-ce', '--generate-counterexamples', action='store_true')
 
@@ -43,7 +42,7 @@ parser.add_argument('--explainer', default=[], type=str,
 args = parser.parse_args()
 
 
-def train_model_on_losses(train_loader, test_loader, args):
+def train_model_on_losses(train_loader, test_loader, args, loss_config_string):
 
     # collect trained learners in list (gets iterated during eval)
     trained_learners = []
@@ -62,7 +61,8 @@ def train_model_on_losses(train_loader, test_loader, args):
         util.seed_all(SEEDS[run_id-1])
 
         # generate unique and descriptive modelname
-        MODELNAME = f'MLL_{args.dataset}{loss_config_string}_run={run_id}'
+        dataset = 'F-MNIST' if args.fmnist else 'MNIST'
+        MODELNAME = f'MLL_{dataset}{loss_config_string}_run={run_id}'
 
         untrained_model = dnns.SimpleConvNet().to(DEVICE)
         # untrained_model = torch.compile(untrained_model)
@@ -115,7 +115,7 @@ def train_model_on_losses(train_loader, test_loader, args):
     return trained_learners
 
 
-def evaluate_model_on_explainers(trained_learners, test_loader, args):
+def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_config_string):
 
     avg_gradcam = []
     avg_ig = []
@@ -343,7 +343,7 @@ if args.num_batches:
     reduced_training_size = args.batch_size * args.num_batches
 
 train_loader, test_loader = decoy_mnist_all_revised(
-    fmnist=args.dataset,
+    fmnist=args.fmnist,
     train_shuffle=True,
     device=DEVICE,
     batch_size=args.batch_size,
@@ -354,9 +354,9 @@ train_loader, test_loader = decoy_mnist_all_revised(
 ######################
 ### Model Training ###
 ######################
-trained_learners = train_model_on_losses(train_loader, test_loader, args)
+trained_learners = train_model_on_losses(train_loader, test_loader, args, loss_config_string)
 
 #########################
 ### Model Evaluation ####
 #########################
-evaluate_model_on_explainers(trained_learners, test_loader, args)
+evaluate_model_on_explainers(trained_learners, test_loader, args, loss_config_string)
