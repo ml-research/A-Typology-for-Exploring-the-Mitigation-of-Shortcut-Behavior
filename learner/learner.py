@@ -114,7 +114,7 @@ class Learner:
         regularization_rates_rr: dict,
 
         normalize_loss_functions=True,
-        early_stopping_patience=5,
+        early_stopping_patience=3,
         save_best_epoch=False,
         save_last=True,
     ):
@@ -189,7 +189,7 @@ class Learner:
 
         lowest_test_loss = 10_000_000_000  # just a very large number
         elapsed_time = 0
-        early_stopping_worse_epochs_counter = 0
+        n_epochs_without_lower_validation_loss = 0
 
         # shift epoch counting by one to start with epoch 1 (instead of 0)
         for epoch in range(self.n_trained_epochs+1, epochs+1):
@@ -314,18 +314,18 @@ class Learner:
                 # todo: think about introducing epsilon for thresholing on stagnating loss curve
 
                 lowest_test_loss = test_loss
-                early_stopping_worse_epochs_counter = 0
+                n_epochs_without_lower_validation_loss = 0
 
                 if save_best_epoch:
                     # set to 50 epochs to prevent resuming training if loaded
                     self.save_to_checkpoint(n_trained_epochs=50, best=True)
             else:
-                early_stopping_worse_epochs_counter += 1
-                if early_stopping_worse_epochs_counter > early_stopping_patience:
+                n_epochs_without_lower_validation_loss += 1
+                if n_epochs_without_lower_validation_loss > early_stopping_patience:
 
                     # exceeded allowed patience -> stop training
                     logging.info(
-                        f'test_loss did not improve within {early_stopping_worse_epochs_counter} epochs')
+                        f'test_loss did not improve within {n_epochs_without_lower_validation_loss} epochs')
                     
                     break
 
