@@ -125,11 +125,11 @@ class Learner:
         Writes the training progress and stats per epoch in a logfile to the logs-folder.
 
         Args:
-            train_data: train data List[(X, y, expl)] where expl are the ground-truth user 
-                feedback masks (optional).
-            test_dataloader: validation dataloader (Xt, yt).
+            train_loader: train data List[(X, y, E_pnlt, E_rwrd, ce_mask)] where E are the ground-truth user 
+                feedback masks and ce_mask for distinguishing normal data from counterexamples (1=ce)
+            test_loader: validation dataloader (Xt, yt).
             epochs: number of epochs to train.
-            save_best: saves the best model on the train loss to file.
+            save_best_epoch: saves the best model on the train loss to file.
             save_last: saves the model after every epoch .
         """
 
