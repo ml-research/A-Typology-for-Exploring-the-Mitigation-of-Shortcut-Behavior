@@ -118,8 +118,8 @@ class Learner:
 
         normalize_loss_functions=True,
         early_stopping_patience=3,
-        save_best_epoch=False,
-        save_last=True,
+        save_best_epoch=True,
+        save_last=False,
     ):
         """
         Fits the learner using training data from dataloader for specified number 
@@ -365,7 +365,7 @@ class Learner:
         Save the model dict to disk.
         """
 
-        modelname = self.modelname + '_best' if best else self.modelname
+        modelname = self.modelname if best else self.modelname + '_not_best'
 
         checkpoint = {
             'weights': self.model.state_dict(),
