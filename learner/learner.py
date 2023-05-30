@@ -11,6 +11,7 @@ from xil_methods.xil_loss import RRRGradCamLoss, RRRLoss, CDEPLoss, HINTLoss, HI
 from datetime import datetime
 from collections import defaultdict
 
+
 class Learner:
     """
     Learner that can be configured to train on multiple weighted loss-functions simultaneously
@@ -82,12 +83,14 @@ class Learner:
 
             if len(X) > 0:  # required as rrr doesn't work on zero-sized tensors
                 logits_non_ce = self.model(X)
-                loss_ra_non_ce = self.loss_function_right_answer(logits_non_ce, y)
+                loss_ra_non_ce = self.loss_function_right_answer(
+                    logits_non_ce, y)
                 loss_sum_ra_non_ce += loss_ra_non_ce
 
                 # iterate over set of loss function keys to consider
                 for k in loss_function_keys:
-                    loss_sums_rr[k] += loss_functions_rr[k](self.model, X, y, loss_ra_non_ce, E_pnlt, E_rwrd, logits_non_ce, self.device).detach()
+                    loss_sums_rr[k] += loss_functions_rr[k](
+                        self.model, X, y, loss_ra_non_ce, E_pnlt, E_rwrd, logits_non_ce, self.device).detach()
 
         loss_normalization_rates = dict()
         # print(f'loss_sum_ra_ce={loss_sum_ra_ce}, loss_sum_ra_non_ce={loss_sum_ra_non_ce}')
@@ -101,7 +104,7 @@ class Learner:
             loss_normalization_rates[k] = normalized_against_ra.detach(
             ) / len(loss_sums_rr)
 
-            # print(f'k={k}, loss_sum_rr={loss_sum_rr}, normalized_loss_sum_rr={loss_sum_rr * loss_normalization_rates[k]}, 
+            # print(f'k={k}, loss_sum_rr={loss_sum_rr}, normalized_loss_sum_rr={loss_sum_rr * loss_normalization_rates[k]},
             # normalized_against_ra={normalized_against_ra}, normalization_rate={loss_normalization_rates[k]}')
 
         return loss_normalization_rates
@@ -240,7 +243,8 @@ class Learner:
 
                     # calculate loss functions
                     for k, loss_function in loss_functions_rr.items():
-                        loss = loss_function(self.model, X, y, batch_losses['ra_non_ce'], E_pnlt, E_rwrd, logits, self.device)
+                        loss = loss_function(
+                            self.model, X, y, batch_losses['ra_non_ce'], E_pnlt, E_rwrd, logits, self.device)
                         batch_losses['rr_' + k] += loss
                         epoch_losses['rr_' + k] += loss
                         epoch_losses['rr'] += loss
@@ -326,7 +330,7 @@ class Learner:
                     # exceeded allowed patience -> stop training
                     logging.info(
                         f'test_loss did not improve within {n_epochs_without_lower_validation_loss} epochs')
-                    
+
                     break
 
         log_writer.close()
