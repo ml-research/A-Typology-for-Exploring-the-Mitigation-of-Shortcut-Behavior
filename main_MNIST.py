@@ -5,7 +5,8 @@
 import argparse
 parser = argparse.ArgumentParser(prog="Learner (F)MNIST")
 
-parser.add_argument('--fmnist', default=False, action='store_true', help='use the Fashion-MNIST instead of MNIST dataset')
+parser.add_argument('--fmnist', default=False, action='store_true',
+                    help='use the Fashion-MNIST instead of MNIST dataset')
 parser.add_argument('-b', '--batch-size', type=int, default=256)
 parser.add_argument('-lr', '--learning-rate', type=float, default=1e-3)
 parser.add_argument('-wd', '--weight-decay', type=float, default=1e-4)
@@ -14,7 +15,8 @@ parser.add_argument('--dont-save-best-epoch', action='store_true')
 parser.add_argument('-nt', '--num-threads', type=int, default=8)
 parser.add_argument('-nb', '--num-batches', type=int,
                     help="will shrink dataset to number of batches")
-parser.add_argument('-nr', '--no-restore', default=False, action='store_true', help="do not try to load model from checkpoint")
+parser.add_argument('-nr', '--no-restore', default=False,
+                    action='store_true', help="do not try to load model from checkpoint")
 
 parser.add_argument('-ce', '--generate-counterexamples', action='store_true')
 
@@ -127,15 +129,17 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
     avg_gbp = []
     avg9 = []
 
+    dataset = 'F-MNIST' if args.fmnist else 'MNIST'
+
     for i, learner in enumerate(trained_learners):
         print(f'evaluating learner {i+1}/{len(trained_learners)}')
 
         if 'GradCAM' in args.explainer:
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_grad/', exist_ok=True)
-            explainer.explain_with_captum('grad_cam', learner.model, test_loader, range(len(test_loader)),
-                                          next_to_each_other=False,
-                                          save_name=f'{args.dataset}-expl/{loss_config_string}_grad/{args.dataset}-{loss_config_string}-test-wp-grad')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_grad/', exist_ok=True)
+            # explainer.explain_with_captum('grad_cam', learner.model, test_loader, range(len(test_loader)),
+            #                               next_to_each_other=False,
+            #                               save_name=f'{dataset}-expl/{loss_config_string}_grad/{dataset}-{loss_config_string}-test-wp-grad')
             thresh = explainer.quantify_wrong_reason('grad_cam', test_loader, learner.model, mode='mean',
                                                      name=f'{loss_config_string}-grad', wr_name=learner.modelname + "--grad",
                                                      threshold=None, flags=False, device=DEVICE)
@@ -144,11 +148,11 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
                                                                threshold=thresh, flags=False, device=DEVICE))
 
         if 'Saliency' in args.explainer:
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_saliency/', exist_ok=True)
-            explainer.explain_with_captum('saliency', learner.model, test_loader, range(len(test_loader)),
-                                          next_to_each_other=False,
-                                          save_name=f'{args.dataset}-expl/{loss_config_string}_saliency/{args.dataset}-{loss_config_string}-test-wp-grad')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_saliency/', exist_ok=True)
+            # explainer.explain_with_captum('saliency', learner.model, test_loader, range(len(test_loader)),
+            #                               next_to_each_other=False,
+            #                               save_name=f'{dataset}-expl/{loss_config_string}_saliency/{dataset}-{loss_config_string}-test-wp-grad')
             thresh = explainer.quantify_wrong_reason('saliency', test_loader, learner.model, mode='mean',
                                                      name=f'{loss_config_string}-saliency', wr_name=learner.modelname + "--saliency",
                                                      threshold=None, flags=False, device=DEVICE)
@@ -157,11 +161,11 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
                                                                 threshold=thresh, flags=False, device=DEVICE))
 
         if 'IxG' in args.explainer:
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_input_x_gradient/', exist_ok=True)
-            explainer.explain_with_captum('input_x_gradient', learner.model, test_loader, range(len(test_loader)),
-                                          next_to_each_other=False,
-                                          save_name=f'{args.dataset}-expl/{loss_config_string}_input_x_gradient/{args.dataset}-{loss_config_string}-test-wp-grad')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_input_x_gradient/', exist_ok=True)
+            # explainer.explain_with_captum('input_x_gradient', learner.model, test_loader, range(len(test_loader)),
+            #                               next_to_each_other=False,
+            #                               save_name=f'{dataset}-expl/{loss_config_string}_input_x_gradient/{dataset}-{loss_config_string}-test-wp-grad')
             thresh = explainer.quantify_wrong_reason('input_x_gradient', test_loader, learner.model, mode='mean',
                                                      name=f'{loss_config_string}-input_x_gradient',
                                                      wr_name=learner.modelname + "--input_x_gradient",
@@ -172,11 +176,11 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
                                                            threshold=thresh, flags=False, device=DEVICE))
 
         if 'DeepLift' in args.explainer:
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_deep_lift/', exist_ok=True)
-            explainer.explain_with_captum('deep_lift', learner.model, test_loader, range(len(test_loader)),
-                                          next_to_each_other=False,
-                                          save_name=f'{args.dataset}-expl/{loss_config_string}_deep_lift/{args.dataset}-{loss_config_string}-test-wp-grad')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_deep_lift/', exist_ok=True)
+            # explainer.explain_with_captum('deep_lift', learner.model, test_loader, range(len(test_loader)),
+            #                               next_to_each_other=False,
+            #                               save_name=f'{dataset}-expl/{loss_config_string}_deep_lift/{dataset}-{loss_config_string}-test-wp-grad')
             thresh = explainer.quantify_wrong_reason('deep_lift', test_loader, learner.model, mode='mean',
                                                      name=f'{loss_config_string}-deep_lift', wr_name=learner.modelname + "--deep_lift",
                                                      threshold=None, flags=False, device=DEVICE)
@@ -185,11 +189,11 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
                                                                 threshold=thresh, flags=False, device=DEVICE))
 
         if 'LRP' in args.explainer:
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_lrp/', exist_ok=True)
-            explainer.explain_with_captum('lrp', learner.model, test_loader, range(len(test_loader)),
-                                          next_to_each_other=False,
-                                          save_name=f'{args.dataset}-expl/{loss_config_string}_lrp/{args.dataset}-{loss_config_string}-test-wp-grad')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_lrp/', exist_ok=True)
+            # explainer.explain_with_captum('lrp', learner.model, test_loader, range(len(test_loader)),
+            #                               next_to_each_other=False,
+            #                               save_name=f'{dataset}-expl/{loss_config_string}_lrp/{dataset}-{loss_config_string}-test-wp-grad')
             thresh = explainer.quantify_wrong_reason('lrp', test_loader, learner.model, mode='mean',
                                                      name=f'{loss_config_string}-lrp', wr_name=learner.modelname + "--lrp",
                                                      threshold=None, flags=False, device=DEVICE)
@@ -198,11 +202,11 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
                                                            threshold=thresh, flags=False, device=DEVICE))
 
         if 'GBP' in args.explainer:
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_guided_backprop/', exist_ok=True)
-            explainer.explain_with_captum('guided_backprop', learner.model, test_loader, range(len(test_loader)),
-                                          next_to_each_other=False,
-                                          save_name=f'{args.dataset}-expl/{loss_config_string}_guided_backprop/{args.dataset}-{loss_config_string}-test-wp-grad')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_guided_backprop/', exist_ok=True)
+            # explainer.explain_with_captum('guided_backprop', learner.model, test_loader, range(len(test_loader)),
+            #                               next_to_each_other=False,
+            #                               save_name=f'{dataset}-expl/{loss_config_string}_guided_backprop/{dataset}-{loss_config_string}-test-wp-grad')
             thresh = explainer.quantify_wrong_reason('guided_backprop', test_loader, learner.model, mode='mean',
                                                      name=f'{loss_config_string}-guided_backprop',
                                                      wr_name=learner.modelname + "--guided_backprop",
@@ -214,11 +218,11 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
 
         # not implemented
         if 'IntGrad' in args.explainer:
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_integrated_gradients/', exist_ok=True)
-            explainer.explain_with_captum('integrated_gradients', learner.model, test_loader, range(len(test_loader)),
-                                          next_to_each_other=False,
-                                          save_name=f'{args.dataset}-expl/{loss_config_string}_integrated_gradients/{args.dataset}-{loss_config_string}-test-wp-grad')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_integrated_gradients/', exist_ok=True)
+            # explainer.explain_with_captum('integrated_gradients', learner.model, test_loader, range(len(test_loader)),
+            #                               next_to_each_other=False,
+            #                               save_name=f'{dataset}-expl/{loss_config_string}_integrated_gradients/{dataset}-{loss_config_string}-test-wp-grad')
             thresh = explainer.quantify_wrong_reason('integrated_gradients', test_loader, learner.model, mode='mean',
                                                      name=f'{loss_config_string}-integrated_gradients',
                                                      wr_name=learner.modelname + "--integrated_gradients",
@@ -229,11 +233,11 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
                                                         threshold=thresh, flags=False, device=DEVICE))
 
         if 'IG' in args.explainer:
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_ig/', exist_ok=True)
-            explainer.explain_with_ig(learner.model, test_loader, range(len(test_loader)),
-                                      next_to_each_other=False,
-                                      save_name=f'{args.dataset}-expl/{loss_config_string}_ig/{args.dataset}-{loss_config_string}-test-wp-ig')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_ig/', exist_ok=True)
+            # explainer.explain_with_ig(learner.model, test_loader, range(len(test_loader)),
+            #                           next_to_each_other=False,
+            #                           save_name=f'{dataset}-expl/{loss_config_string}_ig/{dataset}-{loss_config_string}-test-wp-ig')
             thresh = explainer.quantify_wrong_reason('ig_ross', test_loader, learner.model, mode='mean',
                                                      name=f'{loss_config_string}-ig', wr_name=learner.modelname + "--ig",
                                                      threshold=None, flags=False, device=DEVICE)
@@ -242,25 +246,22 @@ def evaluate_model_on_explainers(trained_learners, test_loader, args, loss_confi
                                                           threshold=thresh, flags=False, device=DEVICE))
 
         if 'LIME' in args.explainer:
-            print("lime start")
-            os.makedirs(
-                f'output_images/{args.dataset}-expl/{loss_config_string}_lime/', exist_ok=True)
-            explainer.explain_with_lime(learner.model, test_loader, range(len(test_loader)),
-                                        next_to_each_other=False,
-                                        save_name=f'{args.dataset}-expl/{loss_config_string}_lime/{args.dataset}-{loss_config_string}-test-wp-lime')
+            # os.makedirs(
+            #     f'output_images/{dataset}-expl/{loss_config_string}_lime/', exist_ok=True)
+            # explainer.explain_with_lime(learner.model, test_loader, range(len(test_loader)),
+            #                             next_to_each_other=False,
+            #                             save_name=f'{dataset}-expl/{loss_config_string}_lime/{dataset}-{loss_config_string}-test-wp-lime')
             thresh = explainer.quantify_wrong_reason_lime(test_loader, learner.model, mode='mean',
                                                           name=f'{loss_config_string}-lime',
                                                           threshold=None, save_raw_attr=True, num_samples=2000, flags=False,
                                                           gray_images=True)
-            print("done thresh")
             avg_lime.append(explainer.quantify_wrong_reason_lime_preload(learner.model, mode='mean', name=f'{loss_config_string}-lime',
                                                                          threshold=thresh, device=DEVICE,
                                                                          batch_size=args.batch_size))
-            print("done append")
 
         # write results to file
         f = open(
-            f"./output_wr_metric/{args.dataset}-{loss_config_string}.txt", "w")
+            f"./output_wr_metric/{dataset}-{loss_config_string}.txt", "w")
 
         if 'IG' in args.explainer:
             f.write(f'IG P: mean:{np.mean(avg_ig)}, std:{np.std(avg_ig)}\n')
@@ -354,9 +355,11 @@ train_loader, test_loader = decoy_mnist_all_revised(
 ######################
 ### Model Training ###
 ######################
-trained_learners = train_model_on_losses(train_loader, test_loader, args, loss_config_string)
+trained_learners = train_model_on_losses(
+    train_loader, test_loader, args, loss_config_string)
 
 #########################
 ### Model Evaluation ####
 #########################
-evaluate_model_on_explainers(trained_learners, test_loader, args, loss_config_string)
+evaluate_model_on_explainers(
+    trained_learners, test_loader, args, loss_config_string)
