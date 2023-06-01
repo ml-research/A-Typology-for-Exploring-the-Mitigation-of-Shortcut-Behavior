@@ -76,12 +76,15 @@ def _generate_dataset(datadir, fmnist):
     Et = []
     Et_hint = []
     
+    # add confunder 
+    # hier wollen wir "consistente fehler", also bei eins bswp immer rechts oben ecke 
     for image, digit in zip(X_raw, y):
         x, e, e_hint = augment(image, digit, all_digits=all_digits)
         X.append(x)
         E.append(e)
         E_hint.append(e_hint)
         
+    # add random confunder to test data (same confunder for instances of the same class)
     for image, digit in zip(Xt_raw, yt):
         x, e, e_hint = augment(image, digit, all_digits=all_digits, randomize=True)
         Xt.append(x)
@@ -97,6 +100,13 @@ def _generate_dataset(datadir, fmnist):
     Xr = np.array([x.ravel() for x in X_raw])
     Xtr = np.array([x.ravel() for x in Xt_raw])
     
+    # Xr: original image (without decoy)
+    # X: image
+    # y: label
+    # E: penalty expl
+    # E_hint: reward expl
+    # X_t: alles, aber für die test-daten
+    # Xt
     return Xr, X, y, E, E_hint, Xtr, Xt, yt, Et, Et_hint
 
 def generate_dataset(cachefile='data_store/rawdata/MNIST/decoy-mnist.npz', fmnist=False):
