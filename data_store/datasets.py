@@ -1916,10 +1916,28 @@ def isic_2019_hint(batch_size=16, train_shuffle=True, number_nc=None, number_c=N
     return dataloaders, weights
 
 
-def decoy_mnist_all_revised(fmnist=False, batch_size=256, device='cuda', train_shuffle=False,
+def decoy_mnist_all_revised(fmnist=False, batch_size=256, device='cpu', train_shuffle=False,
                             test_shuffle=False, feedback=None, n_expl=None, flatten=False,
-                            n_instances=-1, n_counterexamples_per_instance=1, generate_counterexamples=False, counterexample_strategy='random', reduced_training_size=None):
-
+                            n_instances=-1, n_counterexamples_per_instance=1, generate_counterexamples=False, counterexample_strategy='random', reduce_to_n_instances=None):
+    """
+    Improved version of decoy_mnist_all()
+    Args:
+        fmnist: if True loads Fashion-MNIST instead of MNIST dataset
+        batch_size: number of samples train and test yield per iteration
+        device: computing device to move data to
+        train_shuffle: if True will randomly shuffle data yielded by train loader
+        test_shuffle: if True will randomly shuffle data yielded by test loader
+        feedback: either `random`, `adversarial`, `incomplete`or `wrong`
+        n_expl:
+        flatten: if True will flatten yielded images into one dimension
+        n_instances: cf. ce.get_corrections()
+        n_counterexamples_per_instance: cf. ce.get_corrections()
+        generate_counterexamples: if True, dataset will be augmented with counterexamples
+        counterexample_strategy: cf. ce.get_corrections()
+        reduce_to_n_instances: if set, reduces train and test to max number of instances
+    Return:
+        (train, test) DataLoader
+    """
     if fmnist:
         _, X, y, E_pnlt, E_rwrd, _, Xt, yt, Et, _ = load_decoy_mnist.generate_dataset(
             cachefile='data_store/rawdata/fashionMnist/decoy-fmnist.npz', fmnist=True)
@@ -2098,13 +2116,13 @@ def decoy_mnist_all_revised(fmnist=False, batch_size=256, device='cuda', train_s
         train, test = TensorDataset(
             X, y, E_pnlt, E_rwrd, counterexample_mask), TensorDataset(Xt, yt, Et)
 
-    if reduced_training_size:
+    if reduce_to_n_instances:
         # train contains 50% counterexamples and 50% non-counterexamples
         # when subsetting to N instances we want to get N/2 CEs and N/2 non-CEs and we collect them starting from the middle index
         train_start, train_end = int(
-            (len(train) - reduced_training_size) / 2), int((len(train) + reduced_training_size) / 2)
+            (len(train) - reduce_to_n_instances) / 2), int((len(train) + reduce_to_n_instances) / 2)
         train = Subset(train, range(train_start, train_end))
         logging.warn(
-            f"running with reduced_training_size={reduced_training_size}! instances={train_start}:{train_end}")
+            f"running with reduced_training_size={reduce_to_n_instances}! instances={train_start}:{train_end}")
 
     return DataLoader(train, batch_size, train_shuffle), DataLoader(test, batch_size, test_shuffle)

@@ -349,7 +349,7 @@ train_loader, test_loader = decoy_mnist_all_revised(
     device=DEVICE,
     batch_size=args.batch_size,
     generate_counterexamples=args.generate_counterexamples,
-    reduced_training_size=reduced_training_size
+    reduce_to_n_instances=reduced_training_size
 )
 
 ######################
