@@ -190,23 +190,20 @@ class Learner:
 
         logging.info("starting training ...")
 
+        len_dataset = len(train_loader.dataset)
         lowest_test_loss = 10_000_000_000  # just a very large number
         elapsed_time = 0
         n_epochs_without_lower_validation_loss = 0
 
         # shift epoch counting by one to start with epoch 1 (instead of 0)
         for epoch in range(self.n_trained_epochs+1, epochs+1):
+            self.model.train() # required as we evaluate model each epoch (inside self.score())
+
             # collecting losses of epoch
             epoch_losses = defaultdict(
                 lambda: torch.tensor(0., device=self.device))
 
-            # required as we evaluate model each epoch (inside self.score())
-            self.model.train()
-            len_dataset = len(train_loader.dataset)
-
-            # counts the number of correctly classified instances during current epoch
-            epoch_correct = 0
-
+            epoch_correct = 0 # number of correctly classified instances during current epoch
             epoch_start_time = time.time()
 
             # iterate batches
